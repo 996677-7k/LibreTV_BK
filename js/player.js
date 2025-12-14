@@ -75,6 +75,80 @@ window.addEventListener('load', function () {
 
 
 // =================================
+// ============== DOWNLOAD ==========
+// =================================
+
+/**
+ * 视频下载功能
+ */
+function downloadVideo() {
+    // 检查当前是否有视频URL
+    if (!currentVideoUrl) {
+        showToast('当前没有可供下载的视频链接', 'error');
+        return;
+    }
+
+    // 检查视频URL是否是M3U8格式
+    if (currentVideoUrl.toLowerCase().includes('.m3u8') || currentVideoUrl.toLowerCase().includes('.m3u')) {
+        // M3U8文件不能直接下载，需要使用专门的工具
+        showToast('M3U8/M3U格式视频无法直接下载，请使用专业的下载工具（如IDM、N_m3u8DL-CLI等）', 'warning');
+        
+        // 尝试复制链接到剪贴板
+        copyToClipboard(currentVideoUrl)
+            .then(() => {
+                showToast('M3U8/M3U链接已复制到剪贴板', 'success');
+            })
+            .catch(err => {
+                console.error('复制链接失败:', err);
+                showToast('复制链接失败，请手动复制', 'error');
+            });
+        return;
+    }
+
+    // 检查视频URL是否是Blob或本地文件
+    if (currentVideoUrl.startsWith('blob:') || currentVideoUrl.startsWith('file:')) {
+        showToast('Blob或本地视频链接无法直接下载', 'error');
+        return;
+    }
+
+    // 构造下载链接
+    const a = document.createElement('a');
+    a.href = currentVideoUrl;
+    
+    // 尝试从URL中提取文件名，否则使用默认文件名
+    let filename = currentVideoTitle;
+    if (currentEpisodes.length > 0) {
+        const episode = currentEpisodes[currentEpisodeIndex];
+        // 尝试使用集数名称，如果不存在则使用索引
+        const episodeName = episode.name || `第${currentEpisodeIndex + 1}集`;
+        filename += ` - ${episodeName}`;
+    }
+    
+    // 移除文件名中的非法字符
+    filename = filename.replace(/[\\/:*?"<>|]/g, '_');
+    
+    // 尝试从URL中获取扩展名
+    const urlParts = currentVideoUrl.split('.');
+    let extension = urlParts.length > 1 ? urlParts.pop().split('?')[0].toLowerCase() : '';
+
+    if (!['mp4', 'webm', 'ogg', 'flv', 'avi', 'mkv'].includes(extension)) {
+        // 默认使用.mp4
+        extension = 'mp4';
+    }
+    
+    filename += `.${extension}`;
+
+    a.download = filename;
+    
+    // 模拟点击下载
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    showToast(`开始下载: ${filename}`, 'success');
+}
+
+// =================================
 // ============== PLAYER ==========
 // =================================
 // 全局变量
