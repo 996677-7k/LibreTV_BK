@@ -81,7 +81,8 @@ window.addEventListener('load', function () {
 /**
  * 视频下载功能
  */
-function downloadVideo() {
+function downloadVideo(event) {
+    if (event) event.preventDefault();
     // 检查当前是否有视频URL
     if (!currentVideoUrl) {
         showToast('当前没有可供下载的视频链接', 'error');
