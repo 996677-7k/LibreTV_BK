@@ -103,19 +103,20 @@ function downloadVideo(event) {
         filename = filename.replace(/[\\/:*?"<>|]/g, '_');
         filename += '.mp4';
 
-        // 使用 Service Worker 进行后台下载
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'START_DOWNLOAD',
-                payload: { m3u8Url: currentVideoUrl, filename }
+        // 使用下载管理器进行下载
+        if (window.downloadManager) {
+            window.downloadManager.addDownload({
+                title: currentVideoTitle,
+                url: currentVideoUrl,
+                filename: filename
             });
-            
+            window.downloadManager.showPanel();
             showToast(`"${filename}" 的下载任务已发送至后台。`, 'info');
             return;
         }
 
-        // Service Worker 不可用时，回退到主线程下载 (保留旧的 M3U8Downloader 逻辑)
-        showToast('Service Worker 不可用，正在主线程下载...', 'info');
+        // 下载管理器未加载时，回退到旧的直接下载逻辑
+        showToast('下载管理器未加载，正在主线程下载...', 'info');
         
         const modal = document.getElementById('m3u8DownloadModal');
         const progressText = document.getElementById('m3u8ProgressText');

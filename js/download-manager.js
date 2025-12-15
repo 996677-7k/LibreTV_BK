@@ -10,6 +10,9 @@ class DownloadManager {
         this.maxConcurrentDownloads = 3; // 最大并发下载任务数
         this.isProcessing = false; // 是否正在处理队列
         
+        // 监听 Service Worker 消息
+        this.listenToServiceWorker();
+        
         // 从 localStorage 恢复下载历史
         this.loadDownloadHistory();
         
@@ -171,64 +174,116 @@ class DownloadManager {
             this.startDownload(pendingDownload);
         }
 
-        this.isProcessing = false;
-    }
-
-    /**
-     * 开始单个下载任务
+        this.isProcessing = fa    /**
+     * 监听 Service Worker 消息
      */
-        async startDownload(download) {
-        download.status = 'downloading';
-        this.activeDownloads++;
-        this.updateUI();
+    listenToServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                const { type, payload } = event.data;
+                const filename = payload.filename;
+                let download = this.downloads.find(d => d.filename === filename);
 
-        try {
-            // 确保 M3U8Downloader 是一个可实例化的类
-            if (typeof window.M3U8Downloader !== 'function') {
-                throw new Error('M3U8Downloader 类未正确加载或不是一个构造函数。');
-            }
-            
-            const downloader = new window.M3U8Downloader({r({
-                onProgress: (progress) => {
-                    if (progress.percent !== undefined) {
-                        download.progress = progress.percent;
-                        download.loaded = progress.loaded;
-                        download.total = progress.total;
-                        download.speed = progress.speed;
-                    }
-                    this.updateDownloadItem(download);
-                },
-                onError: (error) => {
-                    console.error('[DownloadManager] Download error:', error);
-                },
-                onComplete: (info) => {
-                    download.status = 'completed';
-                    download.progress = 100;
-                    download.completedAt = new Date().toISOString();
-                    this.activeDownloads--;
+                if (!download) {
+                    // 如果下载任务不存在，可能是 Service Worker 启动的，需要添加到列表
+                    download = {
+                        id: Date.now(),
+                        url: '', // Service Worker 已经知道 URL
+                        filename: filename,
+                        status: 'downloading',
+                        progress: 0,
+                        loaded: 0,
+                        total: 0,
+                        title: filename.replace('.mp4', '')
+                    };
+                    this.downloads.unshift(download); // 添加到列表顶部
                     this.updateUI();
-                    this.saveDownloadHistory();
-                    this.processQueue(); // 继续处理队列
+                }
+
+                switch (type) {
+                    case 'DOWNLOAD_PROGRESS':
+                        download.status = 'downloading';
+                        download.progress = payload.progress;
+                        download.loaded = payload.loaded;
+                        download.total = payload.total;
+                        this.updateDownloadItem(download);
+                        break;
+                    case 'DOWNLOAD_COMPLETE':
+                        download.status = 'completed';
+                        download.progress = 100;
+                        this.updateDownloadItem(download);
+                        this.saveDownloadHistory();
+                        break;
+                    case 'DOWNLOAD_FAILED':
+                        download.status = 'failed';
+                        download.error = payload.error;
+                        this.updateDownloadItem(download);
+                        this.saveDownloadHistory();
+                        break;
+                    case 'TRIGGER_DOWNLOAD_BLOB':
+                        // Service Worker 将 Blob 发送回来，由主线程触发下载
+                        this.triggerDownload(payload.blob, payload.filename);
+                        break;
                 }
             });
-
-            await downloader.download(download.url, download.filename);
-
-        } catch (error) {
-            download.status = 'failed';
-            download.error = error.message;
-            this.activeDownloads--;
-            this.updateUI();
-            this.saveDownloadHistory();
-            this.processQueue(); // 继续处理队列
         }
     }
 
     /**
-     * 重试下载
+     * 触发下载（用于 Service Worker 回传的 Blob）
      */
-    retryDownload(downloadId) {
-        const download = this.downloads.find(d => d.id === downloadId);
+    triggerDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * 添加下载任务（主线程调用）
+     */
+    addDownload(task) {
+        // 检查 Service Worker 是否可用
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            // 直接发送给 Service Worker
+            navigator.serviceWorker.controller.postMessage({
+                type: 'START_DOWNLOAD',
+                payload: { m3u8Url: task.url, filename: task.filename }
+            });
+            
+            // 添加到 UI 列表，状态为 sending
+            const download = {
+                id: Date.now(),
+                url: task.url,
+                filename: task.filename,
+                status: 'sending',
+                progress: 0,
+                loaded: 0,
+                total: 0,
+                title: task.title
+            };
+            this.downloads.unshift(download);
+            this.updateUI();
+            this.showPanel();
+        } else {
+            // Service Worker 不可用时，提示用户
+            alert('Service Worker 未加载，无法进行后台下载。请检查浏览器兼容性或 Service Worker 注册状态。');
+        }
+    }
+
+
+
+    /**
+     * 开始单个下载任务 (已废弃，由 Service Worker 处理)
+     */
+    async startDownload(download) {
+        // 保持空实现，确保旧代码不会意外调用
+        console.warn('startDownload is deprecated. Using Service Worker for download logic.');
+    }nload = this.downloads.find(d => d.id === downloadId);
         if (download && (download.status === 'failed' || download.status === 'paused')) {
             download.status = 'pending';
             download.progress = 0;

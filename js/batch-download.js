@@ -249,10 +249,14 @@ function startBatchDownload() {
         filename += '.mp4';
 
         // 检查 URL 是否存在
-        if (episode.url) {
+        // 注意：currentEpisodes[index] 存储的是一个对象 { name: '...', url: '...' }
+        // 确保我们使用的是正确的 URL 属性
+        const episodeUrl = episode.url || episode.link; // 兼容 link 属性
+        
+        if (episodeUrl) {
             navigator.serviceWorker.controller.postMessage({
                 type: 'START_DOWNLOAD',
-                payload: { m3u8Url: episode.url, filename }
+                payload: { m3u8Url: episodeUrl, filename }
             });
             tasksSent++;
         }
