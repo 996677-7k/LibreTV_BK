@@ -1,487 +1,502 @@
 /**
- * 下载管理器 - 后台下载任务管理
- * 支持批量下载、下载队列、进度跟踪
+ * M3U8 下载器 - 用于在浏览器中直接下载HLS/M3U8视频
+ * 支持并发下载、进度显示、自动合并
+ *
+ * M3U8Downloader 类已合并到此文件中，以解决加载问题。
  */
 
-class DownloadManager {
-    constructor() {
-        this.downloads = []; // 下载任务列表
-        this.activeDownloads = 0; // 当前活动下载数
-        this.maxConcurrentDownloads = 3; // 最大并发下载任务数
-        this.isProcessing = false; // 是否正在处理队列
-        
-        // 监听 Service Worker 消息
-        this.listenToServiceWorker();
-        
-        // 从 localStorage 恢复下载历史
-        this.loadDownloadHistory();
-        
-        // 初始化 UI
-        this.initUI();
-    }
-
-    /**
-     * 初始化下载管理器 UI
-     */
-    initUI() {
-        // 检查是否已经存在下载管理器面板
-        if (document.getElementById('downloadManagerPanel')) {
-            return;
-        }
-
-        // 创建下载管理器面板
-        const panel = document.createElement('div');
-        panel.id = 'downloadManagerPanel';
-        panel.className = 'fixed right-4 bottom-4 w-96 bg-[#111] border border-[#333] rounded-lg shadow-2xl z-[9999] hidden';
-        panel.innerHTML = `
-            <div class="flex justify-between items-center p-4 border-b border-[#333]">
-                <h3 class="text-lg font-bold gradient-text">下载管理器</h3>
-                <div class="flex items-center space-x-2">
-                    <button onclick="downloadManager.togglePanel()" class="text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                        </svg>
-                    </button>
-                    <button onclick="downloadManager.closePanel()" class="text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div id="downloadManagerContent" class="max-h-96 overflow-y-auto">
-                <div id="downloadList" class="p-4 space-y-3">
-                    <div class="text-center text-gray-500 py-8">暂无下载任务</div>
-                </div>
-            </div>
-            <div class="p-3 border-t border-[#333] flex justify-between items-center text-sm">
-                <span class="text-gray-400">活动: <span id="activeDownloadCount">0</span> / 总计: <span id="totalDownloadCount">0</span></span>
-                <button onclick="downloadManager.clearCompleted()" class="text-blue-400 hover:text-blue-300">清除已完成</button>
-            </div>
-        `;
-        document.body.appendChild(panel);
-
-        // 创建浮动按钮
-        const floatBtn = document.createElement('button');
-        floatBtn.id = 'downloadManagerFloatBtn';
-        floatBtn.className = 'fixed right-4 bottom-4 w-14 h-14 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full shadow-lg hover:shadow-xl transition-all z-[9998] flex items-center justify-center';
-        floatBtn.onclick = () => this.showPanel();
-        floatBtn.innerHTML = `
-            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-            </svg>
-            <span id="downloadBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
-        `;
-        document.body.appendChild(floatBtn);
-    }
-
-    /**
-     * 显示下载管理器面板
-     */
-    showPanel() {
-        const panel = document.getElementById('downloadManagerPanel');
-        const floatBtn = document.getElementById('downloadManagerFloatBtn');
-        if (panel && floatBtn) {
-            panel.classList.remove('hidden');
-            floatBtn.classList.add('hidden');
-        }
-    }
-
-    /**
-     * 关闭下载管理器面板
-     */
-    closePanel() {
-        const panel = document.getElementById('downloadManagerPanel');
-        const floatBtn = document.getElementById('downloadManagerFloatBtn');
-        if (panel && floatBtn) {
-            panel.classList.add('hidden');
-            floatBtn.classList.remove('hidden');
-        }
-    }
-
-    /**
-     * 切换面板展开/收起
-     */
-    togglePanel() {
-        const content = document.getElementById('downloadManagerContent');
-        if (content) {
-            content.classList.toggle('hidden');
-        }
-    }
-
-    /**
-     * 添加下载任务
-     */
-    addDownload(task) {
-        const download = {
-            id: Date.now() + Math.random(),
-            title: task.title || '未命名视频',
-            episode: task.episode || '',
-            url: task.url,
-            filename: task.filename || 'video.mp4',
-            status: 'pending', // pending, downloading, completed, failed, paused
-            progress: 0,
-            loaded: 0,
-            total: 0,
-            speed: '',
-            error: null,
-            createdAt: new Date().toISOString(),
-            completedAt: null
-        };
-
-        this.downloads.unshift(download);
-        this.updateUI();
-        this.saveDownloadHistory();
-        this.processQueue();
-
-        // 显示通知
-        if (typeof showToast === 'function') {
-            showToast(`已添加到下载队列: ${download.title}${download.episode ? ' - ' + download.episode : ''}`, 'success');
-        }
-
-        return download.id;
-    }
-
-    /**
-     * 批量添加下载任务
-     */
-    addBatchDownloads(tasks) {
-        tasks.forEach(task => this.addDownload(task));
-        if (typeof showToast === 'function') {
-            showToast(`已添加 ${tasks.length} 个任务到下载队列`, 'success');
-        }
-    }
-
-    /**
-     * 处理下载队列
-     */
-    async processQueue() {
-        if (this.isProcessing) return;
-        this.isProcessing = true;
-
-        while (true) {
-            // 检查是否有待下载任务且未达到并发上限
-            if (this.activeDownloads >= this.maxConcurrentDownloads) {
-                break;
-            }
-
-            const pendingDownload = this.downloads.find(d => d.status === 'pending');
-            if (!pendingDownload) {
-                break;
-            }
-
-            // 开始下载
-            this.startDownload(pendingDownload);
-        }
-
-        this.isProcessing = fa    /**
-     * 监听 Service Worker 消息
-     */
-    listenToServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                const { type, payload } = event.data;
-                const filename = payload.filename;
-                let download = this.downloads.find(d => d.filename === filename);
-
-                if (!download) {
-                    // 如果下载任务不存在，可能是 Service Worker 启动的，需要添加到列表
-                    download = {
-                        id: Date.now(),
-                        url: '', // Service Worker 已经知道 URL
-                        filename: filename,
-                        status: 'downloading',
-                        progress: 0,
-                        loaded: 0,
-                        total: 0,
-                        title: filename.replace('.mp4', '')
-                    };
-                    this.downloads.unshift(download); // 添加到列表顶部
-                    this.updateUI();
-                }
-
-                switch (type) {
-                    case 'DOWNLOAD_PROGRESS':
-                        download.status = 'downloading';
-                        download.progress = payload.progress;
-                        download.loaded = payload.loaded;
-                        download.total = payload.total;
-                        this.updateDownloadItem(download);
-                        break;
-                    case 'DOWNLOAD_COMPLETE':
-                        download.status = 'completed';
-                        download.progress = 100;
-                        this.updateDownloadItem(download);
-                        this.saveDownloadHistory();
-                        break;
-                    case 'DOWNLOAD_FAILED':
-                        download.status = 'failed';
-                        download.error = payload.error;
-                        this.updateDownloadItem(download);
-                        this.saveDownloadHistory();
-                        break;
-                    case 'TRIGGER_DOWNLOAD_BLOB':
-                        // Service Worker 将 Blob 发送回来，由主线程触发下载
-                        this.triggerDownload(payload.blob, payload.filename);
-                        break;
-                }
-            });
-        }
-    }
-
-    /**
-     * 触发下载（用于 Service Worker 回传的 Blob）
-     */
-    triggerDownload(blob, filename) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-
-    /**
-     * 添加下载任务（主线程调用）
-     */
-    addDownload(task) {
-        // 检查 Service Worker 是否可用
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            // 直接发送给 Service Worker
-            navigator.serviceWorker.controller.postMessage({
-                type: 'START_DOWNLOAD',
-                payload: { m3u8Url: task.url, filename: task.filename }
-            });
+(function() {
+    // ====================================================================
+    // M3U8Downloader Class (Merged from m3u8-downloader.js)
+    // ====================================================================
+    class M3U8Downloader {
+        constructor(options = {}) {
+            // 从DownloadSettings获取配置，如果没有则使用传入的options
+            const settings = window.DownloadSettings ? window.DownloadSettings.getAll() : {};
             
-            // 添加到 UI 列表，状态为 sending
-            const download = {
-                id: Date.now(),
+            this.maxConcurrent = options.maxConcurrent || settings.maxConcurrent || 5;
+            this.timeout = options.timeout || settings.timeout || 30000;
+            this.retryCount = options.retryCount || settings.retryCount || 3;
+            this.onProgress = options.onProgress || (() => {});
+            this.onError = options.onError || (() => {});
+            this.onComplete = options.onComplete || (() => {});
+        }
+
+        parseM3U8(content, baseUrl) {
+            const lines = content.split(/\r?\n/);
+            const segments = [];
+            
+            try {
+                const baseUrlObj = new URL(baseUrl);
+                const baseDir = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim();
+                    
+                    if (!line || line.startsWith('#')) continue;
+                    
+                    if (this.isSegmentLine(line)) {
+                        let segmentUrl = line;
+                        
+                        if (!segmentUrl.startsWith('http://') && !segmentUrl.startsWith('https://')) {
+                            if (segmentUrl.startsWith('/')) {
+                                segmentUrl = baseUrlObj.protocol + '//' + baseUrlObj.host + segmentUrl;
+                            } else if (!segmentUrl.startsWith('data:')) {
+                                segmentUrl = baseDir + segmentUrl;
+                            }
+                        }
+                        
+                        segments.push(segmentUrl);
+                    }
+                }
+
+                console.log(`[M3U8Parser] Found ${segments.length} segments`);
+                return segments;
+            } catch (error) {
+                console.error('[M3U8Parser] Parse error:', error);
+                throw new Error(`Failed to parse M3U8: ${error.message}`);
+            }
+        }
+
+        isSegmentLine(line) {
+            if (line.startsWith('#') || line.startsWith('http') && line.includes('m3u8')) {
+                return false;
+            }
+            
+            const videoExtensions = ['.ts', '.m4s', '.vtt', '.aac', '.mp4'];
+            for (const ext of videoExtensions) {
+                if (line.includes(ext)) {
+                    return true;
+                }
+            }
+            
+            if ((line.includes('/') || line.includes('.')) && !line.startsWith('//')) {
+                return true;
+            }
+            
+            return false;
+        }
+
+        async downloadSegment(url, retries = this.retryCount) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+                const response = await fetch(url, {
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'omit',
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                return await response.arrayBuffer();
+            } catch (error) {
+                if (retries > 0) {
+                    console.warn(`[M3U8Downloader] Retry segment: ${url} (${this.retryCount - retries + 1}/${this.retryCount})`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    return this.downloadSegment(url, retries - 1);
+                }
+                throw error;
+            }
+        }
+
+        async downloadAllSegments(segments) {
+            const results = new Array(segments.length);
+            let completed = 0;
+            let failed = 0;
+
+            const queue = segments.map((url, index) => ({ url, index }));
+            let queueIndex = 0;
+
+            const downloadWorker = async () => {
+                while (queueIndex < queue.length) {
+                    const item = queue[queueIndex++];
+                    
+                    try {
+                        const data = await this.downloadSegment(item.url);
+                        results[item.index] = data;
+                        completed++;
+                        
+                        this.onProgress({
+                            loaded: completed,
+                            total: segments.length,
+                            percent: Math.round((completed / segments.length) * 100),
+                            speed: this.calculateSpeed(completed, segments.length)
+                        });
+                    } catch (error) {
+                        failed++;
+                        console.error(`[M3U8Downloader] Failed to download segment ${item.index}:`, error);
+                        this.onError({
+                            index: item.index,
+                            url: item.url,
+                            error: error.message
+                        });
+                    }
+                }
+            };
+
+            const workers = [];
+            const workerCount = Math.min(this.maxConcurrent, segments.length);
+            for (let i = 0; i < workerCount; i++) {
+                workers.push(downloadWorker());
+            }
+
+            await Promise.all(workers);
+
+            if (failed > 0) {
+                console.warn(`[M3U8Downloader] ${failed} segments failed to download`);
+            }
+
+            return results;
+        }
+
+        calculateSpeed(completed, total) {
+            return `${completed}/${total}`;
+        }
+
+        mergeSegments(segmentArrays) {
+            const totalLength = segmentArrays.reduce((sum, arr) => sum + (arr ? arr.byteLength : 0), 0);
+            const merged = new Uint8Array(totalLength);
+            
+            let offset = 0;
+            for (const arr of segmentArrays) {
+                if (arr) {
+                    merged.set(new Uint8Array(arr), offset);
+                    offset += arr.byteLength;
+                }
+            }
+
+            return new Blob([merged], { type: 'video/mp4' });
+        }
+
+        async triggerDownload(blob, filename) {
+            // 默认下载方式
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+        }
+
+        async download(m3u8Url, filename) {
+            try {
+                this.onProgress({ status: '正在获取播放列表...' });
+                const m3u8Response = await fetch(m3u8Url, {
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+
+                if (!m3u8Response.ok) {
+                    throw new Error(`Failed to fetch M3U8: HTTP ${m3u8Response.status}`);
+                }
+
+                const m3u8Content = await m3u8Response.text();
+                console.log('[M3U8Downloader] M3U8 content length:', m3u8Content.length);
+
+                this.onProgress({ status: '正在解析播放列表...' });
+                const segments = this.parseM3U8(m3u8Content, m3u8Url);
+
+                if (segments.length === 0) {
+                    throw new Error('未找到视频片段。可能是M3U8格式不支持或链接无效。');
+                }
+
+                console.log(`[M3U8Downloader] Found ${segments.length} segments`);
+
+                this.onProgress({ status: `正在下载 ${segments.length} 个视频片段...` });
+                const segmentArrays = await this.downloadAllSegments(segments);
+
+                this.onProgress({ status: '正在合并视频片段...' });
+                const blob = this.mergeSegments(segmentArrays);
+
+                this.onProgress({ status: '正在生成下载链接...' });
+                this.triggerDownload(blob, filename);
+
+                this.onComplete({
+                    filename: filename,
+                    size: blob.size,
+                    segments: segments.length
+                });
+
+            } catch (error) {
+                console.error('[M3U8Downloader] Download Error:', error);
+                this.onError({
+                    message: error.message,
+                    stack: error.stack
+                });
+                throw error;
+            }
+        }
+    }
+    
+    // 导出 M3U8Downloader 类到全局
+    window.M3U8Downloader = M3U8Downloader;
+
+    // ====================================================================
+    // DownloadManager Class (UI and Queue Logic)
+    // ====================================================================
+    class DownloadManager {
+        constructor() {
+            this.tasks = [];
+            this.activeDownloads = 0;
+            this.MAX_CONCURRENT_DOWNLOADS = 3;
+            this.ui = this.createUI();
+            this.injectUI();
+            this.loadSettings(); // 加载本地路径设置
+            this.processQueue();
+        }
+
+        createUI() {
+            const panel = document.createElement('div');
+            panel.id = 'downloadManagerPanel';
+            panel.className = 'fixed right-0 top-1/2 transform -translate-y-1/2 w-80 bg-gray-800 text-white shadow-2xl z-50 transition-transform duration-300 ease-in-out hidden';
+            panel.style.maxHeight = '80vh';
+            panel.style.overflowY = 'auto';
+            panel.innerHTML = `
+                <div class="p-3 border-b border-gray-700 flex justify-between items-center">
+                    <h2 class="text-lg font-bold">下载管理器</h2>
+                    <button id="closeDownloadManager" class="text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-3">
+                    <div id="downloadSettingsContainer" class="mb-4">
+                        <h3 class="text-sm font-semibold mb-2">下载设置</h3>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-xs">本地路径:</label>
+                            <span id="downloadPathDisplay" class="text-xs text-gray-400 truncate w-1/2">未选择</span>
+                        </div>
+                        <button id="selectPathBtn" class="w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs transition-colors">选择本地保存目录</button>
+                        <p id="pathWarning" class="text-xs text-red-400 mt-1 hidden">注意：浏览器安全限制，您需要在每次启动时重新授权访问目录。</p>
+                    </div>
+                    <h3 class="text-sm font-semibold mb-2">下载队列 (<span id="queueCount">0</span>)</h3>
+                    <div id="downloadQueue">
+                        <p id="noTasks" class="text-gray-500 text-center text-sm">没有待处理的下载任务。</p>
+                    </div>
+                </div>
+            `;
+
+            panel.querySelector('#closeDownloadManager').addEventListener('click', () => this.hidePanel());
+            panel.querySelector('#selectPathBtn').addEventListener('click', () => this.selectDownloadPath());
+
+            return panel;
+        }
+
+        injectUI() {
+            document.body.appendChild(this.ui);
+        }
+
+        showPanel() {
+            this.ui.classList.remove('hidden');
+        }
+
+        hidePanel() {
+            this.ui.classList.add('hidden');
+        }
+
+        addDownload(task) {
+            this.tasks.push({
+                id: Date.now() + Math.random(),
+                title: task.title,
                 url: task.url,
                 filename: task.filename,
-                status: 'sending',
+                status: 'queued',
                 progress: 0,
                 loaded: 0,
                 total: 0,
-                title: task.title
-            };
-            this.downloads.unshift(download);
-            this.updateUI();
-            this.showPanel();
-        } else {
-            // Service Worker 不可用时，提示用户
-            alert('Service Worker 未加载，无法进行后台下载。请检查浏览器兼容性或 Service Worker 注册状态。');
-        }
-    }
-
-
-
-    /**
-     * 开始单个下载任务 (已废弃，由 Service Worker 处理)
-     */
-    async startDownload(download) {
-        // 保持空实现，确保旧代码不会意外调用
-        console.warn('startDownload is deprecated. Using Service Worker for download logic.');
-    }nload = this.downloads.find(d => d.id === downloadId);
-        if (download && (download.status === 'failed' || download.status === 'paused')) {
-            download.status = 'pending';
-            download.progress = 0;
-            download.error = null;
-            this.updateUI();
+                error: null,
+                downloader: null
+            });
+            this.updateQueueUI();
             this.processQueue();
         }
-    }
 
-    /**
-     * 取消下载
-     */
-    cancelDownload(downloadId) {
-        const download = this.downloads.find(d => d.id === downloadId);
-        if (download) {
-            if (download.status === 'downloading') {
-                download.status = 'paused';
-                this.activeDownloads--;
-            } else if (download.status === 'pending') {
-                download.status = 'paused';
-            }
-            this.updateUI();
-            this.saveDownloadHistory();
-        }
-    }
+        updateQueueUI() {
+            const queueDiv = this.ui.querySelector('#downloadQueue');
+            const queueCountSpan = this.ui.querySelector('#queueCount');
+            const noTasksP = this.ui.querySelector('#noTasks');
+            
+            queueCountSpan.textContent = this.tasks.length;
 
-    /**
-     * 删除下载任务
-     */
-    removeDownload(downloadId) {
-        const index = this.downloads.findIndex(d => d.id === downloadId);
-        if (index !== -1) {
-            const download = this.downloads[index];
-            if (download.status === 'downloading') {
-                this.activeDownloads--;
-            }
-            this.downloads.splice(index, 1);
-            this.updateUI();
-            this.saveDownloadHistory();
-            this.processQueue();
-        }
-    }
-
-    /**
-     * 清除已完成的下载
-     */
-    clearCompleted() {
-        this.downloads = this.downloads.filter(d => d.status !== 'completed');
-        this.updateUI();
-        this.saveDownloadHistory();
-    }
-
-    /**
-     * 更新 UI
-     */
-    updateUI() {
-        const downloadList = document.getElementById('downloadList');
-        const activeCount = document.getElementById('activeDownloadCount');
-        const totalCount = document.getElementById('totalDownloadCount');
-        const badge = document.getElementById('downloadBadge');
-
-        if (!downloadList) return;
-
-        // 更新统计
-        const activeDownloads = this.downloads.filter(d => d.status === 'downloading' || d.status === 'pending').length;
-        if (activeCount) activeCount.textContent = activeDownloads;
-        if (totalCount) totalCount.textContent = this.downloads.length;
-
-        // 更新徽章
-        if (badge) {
-            if (activeDownloads > 0) {
-                badge.textContent = activeDownloads;
-                badge.classList.remove('hidden');
+            if (this.tasks.length === 0) {
+                if (noTasksP) noTasksP.classList.remove('hidden');
+                queueDiv.innerHTML = '';
+                return;
             } else {
-                badge.classList.add('hidden');
+                if (noTasksP) noTasksP.classList.add('hidden');
+            }
+
+            queueDiv.innerHTML = this.tasks.map(task => `
+                <div id="task-${task.id}" class="download-item p-2 border-b border-gray-700">
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium text-sm text-white truncate">${task.title}</span>
+                        <span class="text-xs text-${this.getStatusColor(task.status)}-400">${this.getStatusText(task.status)}</span>
+                    </div>
+                    <div class="progress-bar h-1 bg-gray-700 rounded mt-1">
+                        <div class="progress-fill h-full bg-blue-500 rounded" style="width: ${task.progress}%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-400 mt-1">
+                        <span>${task.status === 'downloading' ? `${task.loaded}/${task.total} 片段` : ''}</span>
+                        <span>${task.progress.toFixed(1)}%</span>
+                    </div>
+                    ${task.error ? `<p class="text-xs text-red-400 mt-1">错误: ${task.error}</p>` : ''}
+                </div>
+            `).join('');
+        }
+
+        getStatusColor(status) {
+            switch (status) {
+                case 'queued': return 'gray';
+                case 'downloading': return 'blue';
+                case 'completed': return 'green';
+                case 'failed': return 'red';
+                default: return 'gray';
             }
         }
 
-        // 更新下载列表
-        if (this.downloads.length === 0) {
-            downloadList.innerHTML = '<div class="text-center text-gray-500 py-8">暂无下载任务</div>';
-            return;
+        getStatusText(status) {
+            switch (status) {
+                case 'queued': return '等待中';
+                case 'downloading': return '正在下载';
+                case 'completed': return '已完成';
+                case 'failed': return '失败';
+                default: return '未知';
+            }
         }
 
-        downloadList.innerHTML = this.downloads.map(download => this.renderDownloadItem(download)).join('');
-    }
+        processQueue() {
+            if (this.activeDownloads >= this.MAX_CONCURRENT_DOWNLOADS) {
+                return;
+            }
 
-    /**
-     * 渲染单个下载项
-     */
-    renderDownloadItem(download) {
-        const statusColors = {
-            pending: 'text-yellow-400',
-            downloading: 'text-blue-400',
-            completed: 'text-green-400',
-            failed: 'text-red-400',
-            paused: 'text-gray-400'
-        };
+            const queuedTask = this.tasks.find(task => task.status === 'queued');
 
-        const statusTexts = {
-            pending: '等待中',
-            downloading: '下载中',
-            completed: '已完成',
-            failed: '失败',
-            paused: '已暂停'
-        };
-
-        const color = statusColors[download.status] || 'text-gray-400';
-        const statusText = statusTexts[download.status] || download.status;
-
-        return `
-            <div class="bg-[#1a1a1a] rounded-lg p-3 border border-[#333]" data-download-id="${download.id}">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium text-white truncate">${download.title}</div>
-                        ${download.episode ? `<div class="text-xs text-gray-400">${download.episode}</div>` : ''}
-                    </div>
-                    <span class="text-xs ${color} ml-2">${statusText}</span>
-                </div>
-                
-                ${download.status === 'downloading' || download.status === 'completed' ? `
-                    <div class="mb-2">
-                        <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                            <div class="bg-blue-500 h-full transition-all duration-300" style="width: ${download.progress}%"></div>
-                        </div>
-                        <div class="flex justify-between text-xs text-gray-400 mt-1">
-                            <span>${download.progress}%</span>
-                            <span>${download.speed || ''}</span>
-                        </div>
-                    </div>
-                ` : ''}
-                
-                ${download.error ? `
-                    <div class="text-xs text-red-400 mb-2">${download.error}</div>
-                ` : ''}
-                
-                <div class="flex justify-end space-x-2">
-                    ${download.status === 'failed' || download.status === 'paused' ? `
-                        <button onclick="downloadManager.retryDownload(${download.id})" class="text-xs text-blue-400 hover:text-blue-300">重试</button>
-                    ` : ''}
-                    ${download.status === 'downloading' || download.status === 'pending' ? `
-                        <button onclick="downloadManager.cancelDownload(${download.id})" class="text-xs text-yellow-400 hover:text-yellow-300">暂停</button>
-                    ` : ''}
-                    <button onclick="downloadManager.removeDownload(${download.id})" class="text-xs text-red-400 hover:text-red-300">删除</button>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * 更新单个下载项
-     */
-    updateDownloadItem(download) {
-        const item = document.querySelector(`[data-download-id="${download.id}"]`);
-        if (item) {
-            const newHTML = this.renderDownloadItem(download);
-            const temp = document.createElement('div');
-            temp.innerHTML = newHTML;
-            item.replaceWith(temp.firstElementChild);
+            if (queuedTask) {
+                this.startDownload(queuedTask);
+                this.processQueue();
+            }
         }
-    }
 
-    /**
-     * 保存下载历史
-     */
-    saveDownloadHistory() {
-        try {
-            // 只保存最近100条记录
-            const toSave = this.downloads.slice(0, 100);
-            localStorage.setItem('downloadHistory', JSON.stringify(toSave));
-        } catch (e) {
-            console.error('[DownloadManager] Failed to save download history:', e);
-        }
-    }
+        async startDownload(task) {
+            task.status = 'downloading';
+            this.activeDownloads++;
+            this.updateQueueUI();
 
-    /**
-     * 加载下载历史
-     */
-    loadDownloadHistory() {
-        try {
-            const stored = localStorage.getItem('downloadHistory');
-            if (stored) {
-                this.downloads = JSON.parse(stored);
-                // 将所有未完成的任务标记为暂停
-                this.downloads.forEach(d => {
-                    if (d.status === 'downloading' || d.status === 'pending') {
-                        d.status = 'paused';
+            try {
+                const downloader = new M3U8Downloader({
+                    onProgress: (progress) => {
+                        task.progress = progress.percent || task.progress;
+                        task.loaded = progress.loaded || task.loaded;
+                        task.total = progress.total || task.total;
+                        this.updateQueueUI();
+                    },
+                    onComplete: (result) => {
+                        task.status = 'completed';
+                        task.progress = 100;
+                        this.activeDownloads--;
+                        this.updateQueueUI();
+                        this.processQueue();
+                    },
+                    onError: (error) => {
+                        task.status = 'failed';
+                        task.error = error.message;
+                        this.activeDownloads--;
+                        this.updateQueueUI();
+                        this.processQueue();
                     }
                 });
+                task.downloader = downloader;
+
+                await downloader.download(task.url, task.filename);
+
+            } catch (error) {
+                task.status = 'failed';
+                task.error = error.message;
+                this.activeDownloads--;
+                this.updateQueueUI();
+                this.processQueue();
             }
-        } catch (e) {
-            console.error('[DownloadManager] Failed to load download history:', e);
-            this.downloads = [];
+        }
+
+        // =================================
+        // 本地路径选择逻辑 (File System Access API)
+        // =================================
+
+        isFSApiSupported() {
+            return 'showDirectoryPicker' in window;
+        }
+
+        async loadSettings() {
+            if (!this.isFSApiSupported()) {
+                this.ui.querySelector('#pathWarning').textContent = '您的浏览器不支持本地路径选择功能。';
+                this.ui.querySelector('#pathWarning').classList.remove('hidden');
+                return;
+            }
+
+            // 检查是否有保存的路径信息
+            // 由于安全限制，我们不能直接恢复句柄，只能提示用户重新选择
+            const pathName = localStorage.getItem('LibreTVDownloadPathName');
+            if (pathName) {
+                this.ui.querySelector('#downloadPathDisplay').textContent = pathName;
+                this.ui.querySelector('#pathWarning').classList.remove('hidden');
+            }
+        }
+
+        async selectDownloadPath() {
+            if (!this.isFSApiSupported()) {
+                alert('您的浏览器不支持本地路径选择功能。');
+                return;
+            }
+
+            try {
+                const handle = await window.showDirectoryPicker({
+                    mode: 'readwrite'
+                });
+
+                const permission = await handle.queryPermission({ mode: 'readwrite' });
+                if (permission === 'granted') {
+                    // 存储路径名称，而不是句柄本身
+                    localStorage.setItem('LibreTVDownloadPathName', handle.name);
+                    
+                    // 存储句柄到全局变量，供 M3U8Downloader 使用
+                    window.DownloadSettings.set('directoryHandle', handle);
+
+                    this.ui.querySelector('#downloadPathDisplay').textContent = handle.name;
+                    this.ui.querySelector('#pathWarning').classList.add('hidden');
+                    
+                    alert(`已选择目录: ${handle.name}。下载将保存到此目录。`);
+                } else {
+                    alert('未获得写入权限，无法保存到本地目录。');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    console.log('用户取消了目录选择。');
+                } else {
+                    console.error('选择目录失败:', e);
+                    alert('选择目录失败，请检查浏览器设置。');
+                }
+            }
         }
     }
-}
 
-// 导出 DownloadManager 类到全局
-window.DownloadManager = DownloadManager;
+    // 导出 DownloadManager 类到全局
+    window.DownloadManager = DownloadManager;
 
+    // 自动实例化 DownloadManager
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof window.DownloadManager === 'function' && !window.downloadManager) {
+            window.downloadManager = new window.DownloadManager();
+            console.log('[Player] DownloadManager initialized.');
+        }
+    });
 
+})();
