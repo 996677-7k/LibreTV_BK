@@ -18,34 +18,73 @@ class M3U8Downloader {
 
     /**
      * 解析M3U8文件内容，提取所有.ts片段URL
+     * 支持多种M3U8格式和注释
      */
     parseM3U8(content, baseUrl) {
-        const lines = content.split('\n');
+        const lines = content.split(/\r?\n/);
         const segments = [];
-        const baseUrlObj = new URL(baseUrl);
-        const baseDir = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+        
+        try {
+            const baseUrlObj = new URL(baseUrl);
+            const baseDir = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
 
-        for (let line of lines) {
-            line = line.trim();
-            
-            if (!line || line.startsWith('#')) continue;
-            
-            if (line.endsWith('.ts') || line.includes('.ts?')) {
-                let segmentUrl = line;
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
                 
-                if (!segmentUrl.startsWith('http')) {
-                    if (segmentUrl.startsWith('/')) {
-                        segmentUrl = baseUrlObj.protocol + '//' + baseUrlObj.host + segmentUrl;
-                    } else {
-                        segmentUrl = baseDir + segmentUrl;
+                // 跳过空行和注释
+                if (!line || line.startsWith('#')) continue;
+                
+                // 检查是否是视频片段URL
+                // 支持 .ts, .m4s, .vtt 等格式
+                if (this.isSegmentLine(line)) {
+                    let segmentUrl = line;
+                    
+                    // 处理相对URL
+                    if (!segmentUrl.startsWith('http://') && !segmentUrl.startsWith('https://')) {
+                        if (segmentUrl.startsWith('/')) {
+                            // 绝对路径
+                            segmentUrl = baseUrlObj.protocol + '//' + baseUrlObj.host + segmentUrl;
+                        } else if (!segmentUrl.startsWith('data:')) {
+                            // 相对路径
+                            segmentUrl = baseDir + segmentUrl;
+                        }
                     }
+                    
+                    segments.push(segmentUrl);
                 }
-                
-                segments.push(segmentUrl);
+            }
+
+            console.log(`[M3U8Parser] Found ${segments.length} segments`);
+            return segments;
+        } catch (error) {
+            console.error('[M3U8Parser] Parse error:', error);
+            throw new Error(`Failed to parse M3U8: ${error.message}`);
+        }
+    }
+
+    /**
+     * 判断是否是视频片段行
+     */
+    isSegmentLine(line) {
+        // 排除特殊情况
+        if (line.startsWith('#') || line.startsWith('http') && line.includes('m3u8')) {
+            return false;
+        }
+        
+        // 检查常见的视频片段扩展名
+        const videoExtensions = ['.ts', '.m4s', '.vtt', '.aac', '.mp4'];
+        for (const ext of videoExtensions) {
+            if (line.includes(ext)) {
+                return true;
             }
         }
-
-        return segments;
+        
+        // 检查是否是URL格式（包含/或.）
+        if ((line.includes('/') || line.includes('.')) && !line.startsWith('//')) {
+            return true;
+        }
+        
+        return false;
     }
 
     /**
@@ -72,6 +111,7 @@ class M3U8Downloader {
             return await response.arrayBuffer();
         } catch (error) {
             if (retries > 0) {
+                console.warn(`[M3U8Downloader] Retry segment: ${url} (${this.retryCount - retries + 1}/${this.retryCount})`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 return this.downloadSegment(url, retries - 1);
             }
@@ -107,7 +147,7 @@ class M3U8Downloader {
                     });
                 } catch (error) {
                     failed++;
-                    console.error(`Failed to download segment ${item.index}:`, error);
+                    console.error(`[M3U8Downloader] Failed to download segment ${item.index}:`, error);
                     this.onError({
                         index: item.index,
                         url: item.url,
@@ -118,14 +158,15 @@ class M3U8Downloader {
         };
 
         const workers = [];
-        for (let i = 0; i < Math.min(this.maxConcurrent, segments.length); i++) {
+        const workerCount = Math.min(this.maxConcurrent, segments.length);
+        for (let i = 0; i < workerCount; i++) {
             workers.push(downloadWorker());
         }
 
         await Promise.all(workers);
 
         if (failed > 0) {
-            throw new Error(`Failed to download ${failed} segments`);
+            console.warn(`[M3U8Downloader] ${failed} segments failed to download`);
         }
 
         return results;
@@ -187,15 +228,16 @@ class M3U8Downloader {
             }
 
             const m3u8Content = await m3u8Response.text();
+            console.log('[M3U8Downloader] M3U8 content length:', m3u8Content.length);
 
             this.onProgress({ status: '正在解析播放列表...' });
             const segments = this.parseM3U8(m3u8Content, m3u8Url);
 
             if (segments.length === 0) {
-                throw new Error('No video segments found in M3U8 file');
+                throw new Error('未找到视频片段。可能是M3U8格式不支持或链接无效。');
             }
 
-            console.log(`Found ${segments.length} segments`);
+            console.log(`[M3U8Downloader] Found ${segments.length} segments`);
 
             this.onProgress({ status: `正在下载 ${segments.length} 个视频片段...` });
             const segmentArrays = await this.downloadAllSegments(segments);
@@ -213,7 +255,7 @@ class M3U8Downloader {
             });
 
         } catch (error) {
-            console.error('M3U8 Download Error:', error);
+            console.error('[M3U8Downloader] Download Error:', error);
             this.onError({
                 message: error.message,
                 stack: error.stack
@@ -227,9 +269,14 @@ class M3U8Downloader {
  * 全局M3U8下载函数
  */
 window.downloadM3U8Video = async function(m3u8Url, filename) {
+    console.log('[downloadM3U8Video] Starting download:', m3u8Url, filename);
+    
     const modal = document.getElementById('m3u8DownloadModal');
     if (!modal) {
-        console.error('M3U8 Download Modal not found');
+        console.error('[downloadM3U8Video] M3U8 Download Modal not found');
+        if (typeof showToast === 'function') {
+            showToast('下载对话框未找到，请刷新页面', 'error');
+        }
         return;
     }
 
@@ -242,28 +289,32 @@ window.downloadM3U8Video = async function(m3u8Url, filename) {
     const downloader = new M3U8Downloader({
         onProgress: (progress) => {
             if (progress.percent !== undefined) {
-                progressBar.style.width = progress.percent + '%';
-                progressText.textContent = `${progress.percent}% (${progress.loaded}/${progress.total})`;
+                if (progressBar) progressBar.style.width = progress.percent + '%';
+                if (progressText) progressText.textContent = `${progress.percent}% (${progress.loaded}/${progress.total})`;
             } else if (progress.status) {
-                downloadStatus.textContent = progress.status;
+                if (downloadStatus) downloadStatus.textContent = progress.status;
             }
         },
         onError: (error) => {
-            console.error('Download error:', error);
-            downloadStatus.textContent = `错误: ${error.message || error}`;
-            downloadStatus.style.color = '#ef4444';
+            console.error('[downloadM3U8Video] Download error:', error);
+            if (downloadStatus) {
+                downloadStatus.textContent = `错误: ${error.message || error}`;
+                downloadStatus.style.color = '#ef4444';
+            }
         },
         onComplete: (info) => {
-            downloadStatus.textContent = `下载完成！文件大小: ${(info.size / 1024 / 1024).toFixed(2)}MB`;
-            downloadStatus.style.color = '#10b981';
-            progressBar.style.width = '100%';
-            progressText.textContent = '100%';
+            if (downloadStatus) {
+                downloadStatus.textContent = `下载完成！文件大小: ${(info.size / 1024 / 1024).toFixed(2)}MB`;
+                downloadStatus.style.color = '#10b981';
+            }
+            if (progressBar) progressBar.style.width = '100%';
+            if (progressText) progressText.textContent = '100%';
         }
     });
 
     try {
         await downloader.download(m3u8Url, filename);
     } catch (error) {
-        console.error('Download failed:', error);
+        console.error('[downloadM3U8Video] Download failed:', error);
     }
 };
