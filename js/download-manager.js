@@ -183,7 +183,7 @@ class DownloadManager {
         this.updateUI();
 
         try {
-            const downloader = new window.M3U8Downloader({
+            const downloader = new M3U8Downloader({
                 onProgress: (progress) => {
                     if (progress.percent !== undefined) {
                         download.progress = progress.percent;
