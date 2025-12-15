@@ -347,7 +347,7 @@ window.downloadM3U8Video = async function(m3u8Url, filename) {
     const downloadStatus = document.getElementById('m3u8DownloadStatus');
     const closeBtn = document.getElementById('m3u8CloseBtn');
 
-    const downloader = new M3U8Downloader({
+    const downloader = new window.M3U8Downloader({
         onProgress: (progress) => {
             if (progress.percent !== undefined) {
                 if (progressBar) progressBar.style.width = progress.percent + '%';
