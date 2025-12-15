@@ -370,6 +370,16 @@ function initializePageContent() {
     }, 200);
 }
 
+// 确保在所有依赖加载完成后实例化下载管理器
+if (typeof window.DownloadManager === 'function' && !window.downloadManager) {
+    window.downloadManager = new window.DownloadManager();
+    console.log('[Player] DownloadManager initialized.');
+} else if (typeof window.DownloadManager !== 'function') {
+    console.error('[Player] DownloadManager class not found. Check script loading order.');
+} else {
+    console.log('[Player] DownloadManager already initialized.');
+}
+
 // 处理键盘快捷键
 function handleKeyboardShortcuts(e) {
     // 忽略输入框中的按键事件

@@ -426,23 +426,7 @@ class DownloadManager {
     }
 }
 
-// 创建全局下载管理器实例
-window.downloadManager = null;
-
 // 导出 DownloadManager 类到全局
 window.DownloadManager = DownloadManager;
 
-// 页面加载时初始化下载管理器
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        // 确保在 DOMContentLoaded 时实例化
-        if (!window.downloadManager) {
-            window.downloadManager = new window.DownloadManager();
-        }
-    });
-} else {
-    // 如果已经加载完成，立即实例化
-    if (!window.downloadManager) {
-        window.downloadManager = new window.DownloadManager();
-    }
-}
+
