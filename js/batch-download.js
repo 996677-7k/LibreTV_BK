@@ -227,16 +227,9 @@ function startBatchDownload() {
         return;
     }
     
-    // 检查 Service Worker 是否可用
-    if (!('serviceWorker' in navigator && navigator.serviceWorker.controller)) {
-        if (typeof showToast === 'function') {
-            showToast('Service Worker 未加载，无法进行后台批量下载', 'error');
-        }
-        return;
-    }
-    
     const selectedArray = Array.from(selectedEpisodes).sort((a, b) => a - b);
-    let tasksSent = 0;
+    const tasks = [];
+    let tasksCount = 0;
     
     selectedArray.forEach(index => {
         const episode = currentEpisodes[index];
@@ -249,23 +242,35 @@ function startBatchDownload() {
         filename += '.mp4';
 
         // 检查 URL 是否存在
-        // 注意：currentEpisodes[index] 存储的是一个对象 { name: '...', url: '...' }
-        // 确保我们使用的是正确的 URL 属性
         const episodeUrl = episode.url || episode.link; // 兼容 link 属性
         
         if (episodeUrl) {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'START_DOWNLOAD',
-                payload: { m3u8Url: episodeUrl, filename }
+            tasks.push({
+                title: currentVideoTitle,
+                url: episodeUrl,
+                filename: filename
             });
-            tasksSent++;
+            tasksCount++;
         }
     });
     
+    if (tasks.length === 0) {
+        if (typeof showToast === 'function') {
+            showToast('没有有效的下载任务', 'warning');
+        }
+        return;
+    }
+
+    // 将任务数据编码为 URL 参数
+    const taskParam = encodeURIComponent(JSON.stringify(tasks));
+    
+    // 打开下载工作页面
+    window.open(`/download-worker.html?tasks=${taskParam}`, 'LibreTVDownloadWorker', 'width=400,height=600,left=0,top=0');
+
     // 退出批量下载模式
     toggleBatchDownloadMode();
     
     if (typeof showToast === 'function') {
-        showToast(`已将 ${tasksSent} 个任务发送至后台下载`, 'success');
+        showToast(`已将 ${tasksCount} 个任务发送至后台窗口`, 'success');
     }
 }

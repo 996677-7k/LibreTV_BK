@@ -103,52 +103,20 @@ function downloadVideo(event) {
         filename = filename.replace(/[\\/:*?"<>|]/g, '_');
         filename += '.mp4';
 
-        // 使用下载管理器进行下载
-        if (window.downloadManager) {
-            window.downloadManager.addDownload({
-                title: currentVideoTitle,
-                url: currentVideoUrl,
-                filename: filename
-            });
-            window.downloadManager.showPanel();
-            showToast(`"${filename}" 的下载任务已发送至后台。`, 'info');
-            return;
-        }
-
-        // 下载管理器未加载时，回退到旧的直接下载逻辑
-        showToast('下载管理器未加载，正在主线程下载...', 'info');
+        // 使用 window.open() 将任务发送给下载工作页面
+        const task = {
+            title: currentVideoTitle,
+            url: currentVideoUrl,
+            filename: filename
+        };
         
-        const modal = document.getElementById('m3u8DownloadModal');
-        const progressText = document.getElementById('m3u8ProgressText');
-        const downloadStatus = document.getElementById('m3u8DownloadStatus');
-        const closeBtn = document.getElementById('m3u8CloseBtn');
-
-        if (modal) {
-            modal.classList.remove('hidden');
-            progressText.textContent = '正在主线程下载...';
-            downloadStatus.textContent = '';
-            closeBtn.onclick = () => modal.classList.add('hidden');
-        }
-
-        const downloader = new window.M3U8Downloader({
-            onProgress: (progress) => {
-                if (progress.percent !== undefined) {
-                    const progressBar = document.getElementById('m3u8ProgressBar');
-                    if (progressBar) progressBar.style.width = progress.percent + '%';
-                    if (progressText) progressText.textContent = `${progress.percent}% (${progress.loaded}/${progress.total})`;
-                }
-                if (downloadStatus) downloadStatus.textContent = progress.status || '';
-            },
-            onComplete: (result) => {
-                if (downloadStatus) downloadStatus.textContent = `下载完成！文件大小: ${(result.size / (1024 * 1024)).toFixed(2)}MB`;
-                if (closeBtn) closeBtn.textContent = '关闭';
-            },
-            onError: (error) => {
-                if (downloadStatus) downloadStatus.textContent = `下载失败: ${error.message}`;
-                if (closeBtn) closeBtn.textContent = '关闭';
-            }
-        });
-        downloader.download(currentVideoUrl, filename);
+        // 将任务数据编码为 URL 参数
+        const taskParam = encodeURIComponent(JSON.stringify([task]));
+        
+        // 打开下载工作页面
+        window.open(`/download-worker.html?tasks=${taskParam}`, 'LibreTVDownloadWorker', 'width=400,height=600,left=0,top=0');
+        
+        showToast(`"${filename}" 的下载任务已发送至后台窗口。`, 'info');
         return;
     }
 

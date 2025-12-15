@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LibreTV 后台下载管理器</title>
+    <link href="css/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            padding: 1rem;
+        }
+        .download-item {
+            background-color: #222;
+            border: 1px solid #333;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            padding: 10px;
+        }
+        .progress-bar {
+            height: 8px;
+            background-color: #444;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #3b82f6; /* blue-500 */
+            transition: width 0.3s ease;
+        }
+        .status-text {
+            font-size: 0.8rem;
+            color: #9ca3af;
+        }
+        .settings-panel {
+            background-color: #222;
+            border: 1px solid #3b82f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-xl font-bold mb-4 text-blue-400">LibreTV 后台下载管理器</h1>
+
+        <div id="settingsPanel" class="settings-panel">
+            <h2 class="text-lg font-semibold mb-3">下载设置</h2>
+            <div class="flex items-center justify-between mb-3">
+                <label for="downloadPathDisplay" class="text-sm">本地下载路径:</label>
+                <span id="downloadPathDisplay" class="text-sm text-gray-400 truncate w-1/2">未选择</span>
+            </div>
+            <button id="selectPathBtn" class="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors">选择本地保存目录</button>
+            <p id="pathWarning" class="text-xs text-red-400 mt-2 hidden">注意：浏览器安全限制，您需要在每次启动时重新授权访问目录。</p>
+        </div>
+
+        <h2 class="text-lg font-semibold mb-3">下载队列 (<span id="queueCount">0</span>)</h2>
+        <div id="downloadQueue">
+            <!-- 下载任务将在这里动态添加 -->
+            <p id="noTasks" class="text-gray-500 text-center">没有待处理的下载任务。</p>
+        </div>
+    </div>
+
+    <script src="js/m3u8-downloader.js"></script>
+    <script>
+        // 全局下载任务列表
+        let downloadTasks = [];
+        let activeDownloads = 0;
+        const MAX_CONCURRENT_DOWNLOADS = 3;
+        let directoryHandle = null; // 用于 File System Access API
+
+        // =================================
+        // UI 更新函数
+        // =================================
+
+        function updateQueueUI() {
+            const queueDiv = document.getElementById('downloadQueue');
+            const queueCountSpan = document.getElementById('queueCount');
+            const noTasksP = document.getElementById('noTasks');
+            
+            queueCountSpan.textContent = downloadTasks.length;
+
+            if (downloadTasks.length === 0) {
+                if (noTasksP) noTasksP.classList.remove('hidden');
+                return;
+            } else {
+                if (noTasksP) noTasksP.classList.add('hidden');
+            }
+
+            // 重新渲染整个列表
+            queueDiv.innerHTML = downloadTasks.map(task => `
+                <div id="task-${task.id}" class="download-item">
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium text-white truncate">${task.title}</span>
+                        <span class="status-text text-${getStatusColor(task.status)}-400">${getStatusText(task.status)}</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${task.progress}%"></div>
+                    </div>
+                    <div class="flex justify-between status-text mt-1">
+                        <span>${task.status === 'downloading' ? `${task.loaded}/${task.total} 片段` : ''}</span>
+                        <span>${task.progress.toFixed(1)}%</span>
+                    </div>
+                    ${task.error ? `<p class="text-xs text-red-400 mt-1">错误: ${task.error}</p>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'queued': return 'gray';
+                case 'downloading': return 'blue';
+                case 'completed': return 'green';
+                case 'failed': return 'red';
+                default: return 'gray';
+            }
+        }
+
+        function getStatusText(status) {
+            switch (status) {
+                case 'queued': return '等待中';
+                case 'downloading': return '正在下载';
+                case 'completed': return '已完成';
+                case 'failed': return '失败';
+                default: return '未知';
+            }
+        }
+
+        // =================================
+        // 下载逻辑
+        // =================================
+
+        /**
+         * 处理 URL 参数中的下载任务
+         */
+        function loadTasksFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tasksParam = urlParams.get('tasks');
+            if (tasksParam) {
+                try {
+                    const tasks = JSON.parse(decodeURIComponent(tasksParam));
+                    tasks.forEach(task => {
+                        downloadTasks.push({
+                            id: Date.now() + Math.random(),
+                            title: task.title,
+                            url: task.url,
+                            filename: task.filename,
+                            status: 'queued',
+                            progress: 0,
+                            loaded: 0,
+                            total: 0,
+                            error: null,
+                            downloader: null // 存储 M3U8Downloader 实例
+                        });
+                    });
+                    updateQueueUI();
+                    processQueue();
+                } catch (e) {
+                    console.error('解析下载任务失败:', e);
+                }
+            }
+        }
+
+        /**
+         * 处理下载队列
+         */
+        function processQueue() {
+            if (activeDownloads >= MAX_CONCURRENT_DOWNLOADS) {
+                return;
+            }
+
+            const queuedTask = downloadTasks.find(task => task.status === 'queued');
+
+            if (queuedTask) {
+                startDownload(queuedTask);
+                processQueue(); // 尝试启动下一个
+            }
+        }
+
+        /**
+         * 启动单个下载任务
+         */
+        async function startDownload(task) {
+            task.status = 'downloading';
+            activeDownloads++;
+            updateQueueUI();
+
+            try {
+                // 确保 M3U8Downloader 是一个可实例化的类
+                if (typeof window.M3U8Downloader !== 'function') {
+                    throw new Error('M3U8Downloader 类未正确加载。');
+                }
+                
+                const downloader = new window.M3U8Downloader({
+                    onProgress: (progress) => {
+                        task.progress = progress.percent || task.progress;
+                        task.loaded = progress.loaded || task.loaded;
+                        task.total = progress.total || task.total;
+                        updateQueueUI();
+                    },
+                    onComplete: (result) => {
+                        task.status = 'completed';
+                        task.progress = 100;
+                        activeDownloads--;
+                        updateQueueUI();
+                        processQueue();
+                    },
+                    onError: (error) => {
+                        task.status = 'failed';
+                        task.error = error.message;
+                        activeDownloads--;
+                        updateQueueUI();
+                        processQueue();
+                    }
+                });
+                task.downloader = downloader;
+
+                // 检查是否有本地目录句柄，如果有，则使用 File System Access API
+                if (directoryHandle) {
+                    await downloader.downloadToLocal(task.url, task.filename, directoryHandle);
+                } else {
+                    // 否则回退到浏览器下载
+                    await downloader.download(task.url, task.filename);
+                }
+
+            } catch (error) {
+                task.status = 'failed';
+                task.error = error.message;
+                activeDownloads--;
+                updateQueueUI();
+                processQueue();
+            }
+        }
+
+        // =================================
+        // 本地路径选择逻辑
+        // =================================
+
+        /**
+         * 检查浏览器是否支持 File System Access API
+         */
+        function isFSApiSupported() {
+            return 'showDirectoryPicker' in window;
+        }
+
+        /**
+         * 加载保存的目录句柄
+         */
+        async function loadDirectoryHandle() {
+            if (!isFSApiSupported()) {
+                document.getElementById('pathWarning').textContent = '您的浏览器不支持本地路径选择功能。';
+                document.getElementById('pathWarning').classList.remove('hidden');
+                return;
+            }
+
+            const handleName = 'LibreTVDownloadDirectory';
+            const handleId = localStorage.getItem(handleName);
+
+            if (handleId) {
+                try {
+                    // 尝试从 ID 恢复句柄
+                    const handle = await window.showDirectoryPicker({ id: handleId });
+                    
+                    // 检查权限，如果用户没有授予权限，会抛出异常
+                    const permission = await handle.queryPermission({ mode: 'readwrite' });
+                    if (permission === 'granted') {
+                        directoryHandle = handle;
+                        document.getElementById('downloadPathDisplay').textContent = directoryHandle.name;
+                        document.getElementById('pathWarning').classList.add('hidden');
+                        console.log('Directory handle loaded and permission granted.');
+                    } else {
+                        // 权限丢失，需要重新选择
+                        localStorage.removeItem(handleName);
+                        document.getElementById('downloadPathDisplay').textContent = '权限丢失，请重新选择';
+                        document.getElementById('pathWarning').classList.remove('hidden');
+                    }
+                } catch (e) {
+                    // 句柄恢复失败
+                    localStorage.removeItem(handleName);
+                    document.getElementById('downloadPathDisplay').textContent = '未选择';
+                    document.getElementById('pathWarning').classList.remove('hidden');
+                    console.error('Failed to load directory handle:', e);
+                }
+            }
+        }
+
+        /**
+         * 弹出目录选择器
+         */
+        async function selectDownloadPath() {
+            if (!isFSApiSupported()) {
+                alert('您的浏览器不支持本地路径选择功能。');
+                return;
+            }
+
+            try {
+                const handle = await window.showDirectoryPicker({
+                    mode: 'readwrite'
+                });
+
+                // 检查权限
+                const permission = await handle.queryPermission({ mode: 'readwrite' });
+                if (permission === 'granted') {
+                    directoryHandle = handle;
+                    document.getElementById('downloadPathDisplay').textContent = directoryHandle.name;
+                    document.getElementById('pathWarning').classList.add('hidden');
+                    
+                    // 保存句柄 ID
+                    const handleName = 'LibreTVDownloadDirectory';
+                    localStorage.setItem(handleName, handle.id);
+
+                    alert(`已选择目录: ${handle.name}。下载将保存到此目录。`);
+                } else {
+                    alert('未获得写入权限，无法保存到本地目录。');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    console.log('用户取消了目录选择。');
+                } else {
+                    console.error('选择目录失败:', e);
+                    alert('选择目录失败，请检查浏览器设置。');
+                }
+            }
+        }
+
+        // =================================
+        // 初始化
+        // =================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // 绑定事件
+            document.getElementById('selectPathBtn').addEventListener('click', selectDownloadPath);
+
+            // 尝试加载保存的目录句柄
+            loadDirectoryHandle();
+
+            // 从 URL 加载任务并开始处理队列
+            loadTasksFromUrl();
+        });
+    </script>
+</body>
+</html>
