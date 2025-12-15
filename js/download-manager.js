@@ -3,8 +3,7 @@
  * 支持批量下载、下载队列、进度跟踪
  */
 
-(function() {
-    class DownloadManager {
+class DownloadManager {
     constructor() {
         this.downloads = []; // 下载任务列表
         this.activeDownloads = 0; // 当前活动下载数
@@ -429,6 +428,5 @@
 
 // 导出 DownloadManager 类到全局
 window.DownloadManager = DownloadManager;
-})();
 
 
