@@ -75,6 +75,24 @@ const DownloadSettingsUI = {
                         </label>
                         <p class="text-gray-500 text-xs mt-1">下载时显示进度条和状态信息</p>
                     </div>
+                    
+                    <!-- 本地下载路径 -->
+                    <div>
+                        <label class="text-gray-300 text-sm font-medium mb-2 block">
+                            本地下载路径
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="downloadPathInput" readonly 
+                                   class="flex-1 bg-[#1a1a1a] border border-[#333] text-gray-400 px-3 py-2 rounded text-sm cursor-not-allowed" 
+                                   placeholder="使用浏览器默认下载目录" />
+                            <button onclick="DownloadSettingsUI.selectDownloadPath()" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm transition-colors whitespace-nowrap">
+                                选择目录
+                            </button>
+                        </div>
+                        <p class="text-gray-500 text-xs mt-1">选择本地下载目录（需要浏览器支持 File System Access API）</p>
+                        <p id="downloadPathStatus" class="text-yellow-400 text-xs mt-1 hidden">浏览器不支持此功能</p>
+                    </div>
                 </div>
                 
                 <div class="flex gap-2 mt-6 flex-none">
@@ -91,6 +109,140 @@ const DownloadSettingsUI = {
         </div>
         `;
         return html;
+    },
+
+    /**
+     * 选择下载路径
+     */
+    async selectDownloadPath() {
+        // 检查浏览器是否支持 File System Access API
+        if (!('showDirectoryPicker' in window)) {
+            const statusEl = document.getElementById('downloadPathStatus');
+            if (statusEl) {
+                statusEl.classList.remove('hidden');
+                statusEl.textContent = '您的浏览器不支持此功能，请使用 Chrome/Edge 86+ 或其他支持的浏览器';
+            }
+            if (typeof showToast === 'function') {
+                showToast('浏览器不支持目录选择功能', 'error');
+            }
+            return;
+        }
+
+        try {
+            // 打开目录选择器
+            const directoryHandle = await window.showDirectoryPicker({
+                mode: 'readwrite',
+                startIn: 'downloads'
+            });
+
+            // 保存目录句柄
+            if (window.DownloadSettings) {
+                window.DownloadSettings.set('directoryHandle', directoryHandle.name);
+                // 尝试保存句柄到 IndexedDB（由于安全限制，不能直接存储到 localStorage）
+                this.saveDirectoryHandle(directoryHandle);
+            }
+
+            // 更新 UI
+            const pathInput = document.getElementById('downloadPathInput');
+            if (pathInput) {
+                pathInput.value = directoryHandle.name;
+                pathInput.classList.remove('cursor-not-allowed');
+                pathInput.classList.add('text-white');
+            }
+
+            const statusEl = document.getElementById('downloadPathStatus');
+            if (statusEl) {
+                statusEl.classList.remove('hidden', 'text-yellow-400');
+                statusEl.classList.add('text-green-400');
+                statusEl.textContent = '目录选择成功！下载将保存到此目录';
+            }
+
+            if (typeof showToast === 'function') {
+                showToast(`已选择下载目录: ${directoryHandle.name}`, 'success');
+            }
+        } catch (error) {
+            console.error('[DownloadSettingsUI] Failed to select directory:', error);
+            if (error.name !== 'AbortError') {
+                if (typeof showToast === 'function') {
+                    showToast('选择目录失败', 'error');
+                }
+            }
+        }
+    },
+
+    /**
+     * 保存目录句柄到 IndexedDB
+     */
+    async saveDirectoryHandle(handle) {
+        try {
+            // 使用 IndexedDB 存储目录句柄
+            const dbName = 'LibreTV_DownloadSettings';
+            const storeName = 'directoryHandles';
+            
+            const request = indexedDB.open(dbName, 1);
+            
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(storeName)) {
+                    db.createObjectStore(storeName);
+                }
+            };
+            
+            request.onsuccess = (event) => {
+                const db = event.target.result;
+                const transaction = db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                store.put(handle, 'downloadDirectory');
+                console.log('[DownloadSettingsUI] Directory handle saved to IndexedDB');
+            };
+            
+            request.onerror = (error) => {
+                console.error('[DownloadSettingsUI] Failed to save directory handle:', error);
+            };
+        } catch (error) {
+            console.error('[DownloadSettingsUI] IndexedDB error:', error);
+        }
+    },
+
+    /**
+     * 从 IndexedDB 加载目录句柄
+     */
+    async loadDirectoryHandle() {
+        try {
+            const dbName = 'LibreTV_DownloadSettings';
+            const storeName = 'directoryHandles';
+            
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(dbName, 1);
+                
+                request.onsuccess = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(storeName)) {
+                        resolve(null);
+                        return;
+                    }
+                    
+                    const transaction = db.transaction([storeName], 'readonly');
+                    const store = transaction.objectStore(storeName);
+                    const getRequest = store.get('downloadDirectory');
+                    
+                    getRequest.onsuccess = () => {
+                        resolve(getRequest.result);
+                    };
+                    
+                    getRequest.onerror = () => {
+                        resolve(null);
+                    };
+                };
+                
+                request.onerror = () => {
+                    resolve(null);
+                };
+            });
+        } catch (error) {
+            console.error('[DownloadSettingsUI] Failed to load directory handle:', error);
+            return null;
+        }
     },
 
     /**
@@ -197,6 +349,23 @@ const DownloadSettingsUI = {
         if (showProgressCheckbox) {
             showProgressCheckbox.checked = settings.showProgress;
         }
+        
+        // 加载下载目录
+        const downloadPathInput = document.getElementById('downloadPathInput');
+        if (downloadPathInput && settings.directoryHandle) {
+            downloadPathInput.value = settings.directoryHandle;
+            downloadPathInput.classList.remove('cursor-not-allowed');
+            downloadPathInput.classList.add('text-white');
+        }
+        
+        // 尝试从 IndexedDB 加载目录句柄
+        this.loadDirectoryHandle().then(handle => {
+            if (handle && downloadPathInput) {
+                downloadPathInput.value = handle.name;
+                downloadPathInput.classList.remove('cursor-not-allowed');
+                downloadPathInput.classList.add('text-white');
+            }
+        });
     },
 
     /**

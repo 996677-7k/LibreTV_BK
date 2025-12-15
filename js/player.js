@@ -91,24 +91,31 @@ function downloadVideo(event) {
 
     // 检查视频URL是否是M3U8格式
     if (currentVideoUrl.toLowerCase().includes('.m3u8') || currentVideoUrl.toLowerCase().includes('.m3u')) {
-        // 使用内置M3U8下载器
-        showToast('正在启动M3U8视频下载...', 'info');
+        // 使用下载管理器（后台下载）
+        showToast('正在添加到下载队列...', 'info');
         
         // 生成文件名
         let filename = currentVideoTitle;
+        let episodeName = '';
         if (currentEpisodes.length > 0) {
             const episode = currentEpisodes[currentEpisodeIndex];
-            const episodeName = episode.name || `第${currentEpisodeIndex + 1}集`;
+            episodeName = episode.name || `第${currentEpisodeIndex + 1}集`;
             filename += ` - ${episodeName}`;
         }
         filename = filename.replace(/[\\/:*?"<>|]/g, '_');
-        filename += '.ts';
+        filename += '.mp4';
         
-        // 调用M3U8下载器
-        if (typeof downloadM3U8Video === 'function') {
-            downloadM3U8Video(currentVideoUrl, filename);
+        // 添加到下载管理器
+        if (window.downloadManager) {
+            window.downloadManager.addDownload({
+                title: currentVideoTitle,
+                episode: episodeName,
+                url: currentVideoUrl,
+                filename: filename
+            });
+            window.downloadManager.showPanel();
         } else {
-            showToast('M3U8下载器未加载', 'error');
+            showToast('下载管理器未加载', 'error');
         }
         return;
     }

@@ -194,13 +194,31 @@ class M3U8Downloader {
             }
         }
 
-        return new Blob([merged], { type: 'video/mp2t' });
+        return new Blob([merged], { type: 'video/mp4' });
     }
 
     /**
      * 触发浏览器下载
      */
-    triggerDownload(blob, filename) {
+    async triggerDownload(blob, filename) {
+        // 尝试使用自定义目录
+        const directoryHandle = await this.getDirectoryHandle();
+        
+        if (directoryHandle) {
+            try {
+                // 使用 File System Access API 保存文件
+                const fileHandle = await directoryHandle.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                console.log('[M3U8Downloader] File saved to custom directory:', filename);
+                return;
+            } catch (error) {
+                console.warn('[M3U8Downloader] Failed to save to custom directory, falling back to default:', error);
+            }
+        }
+        
+        // 默认下载方式
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -210,8 +228,48 @@ class M3U8Downloader {
         document.body.removeChild(a);
         
         setTimeout(() => URL.revokeObjectURL(url), 100);
-    }
-
+    },
+    
+    /**
+     * 获取保存的目录句柄
+     */
+    async getDirectoryHandle() {
+        try {
+            const dbName = 'LibreTV_DownloadSettings';
+            const storeName = 'directoryHandles';
+            
+            return new Promise((resolve) => {
+                const request = indexedDB.open(dbName, 1);
+                
+                request.onsuccess = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(storeName)) {
+                        resolve(null);
+                        return;
+                    }
+                    
+                    const transaction = db.transaction([storeName], 'readonly');
+                    const store = transaction.objectStore(storeName);
+                    const getRequest = store.get('downloadDirectory');
+                    
+                    getRequest.onsuccess = () => {
+                        resolve(getRequest.result);
+                    };
+                    
+                    getRequest.onerror = () => {
+                        resolve(null);
+                    };
+                };
+                
+                request.onerror = () => {
+                    resolve(null);
+                };
+            });
+        } catch (error) {
+            console.error('[M3U8Downloader] Failed to get directory handle:', error);
+            return null;
+        }
+    },
     /**
      * 主下载函数
      */
