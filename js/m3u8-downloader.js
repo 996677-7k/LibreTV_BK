@@ -275,6 +275,45 @@
      * 主下载函数
      */
     async download(m3u8Url, filename) {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            // 使用 Service Worker 进行后台下载
+            navigator.serviceWorker.controller.postMessage({
+                type: 'START_DOWNLOAD',
+                payload: { m3u8Url, filename }
+            });
+            
+            // 监听 Service Worker 的消息
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                const { type, payload } = event.data;
+                if (payload.filename !== filename) return;
+
+                switch (type) {
+                    case 'DOWNLOAD_PROGRESS':
+                        this.onProgress({
+                            percent: payload.progress,
+                            loaded: payload.loaded,
+                            total: payload.total,
+                            status: `正在下载片段: ${payload.loaded}/${payload.total}`
+                        });
+                        break;
+                    case 'DOWNLOAD_COMPLETE':
+                        this.onComplete({ filename, size: 0, segments: payload.total });
+                        break;
+                    case 'DOWNLOAD_FAILED':
+                        this.onError({ message: `后台下载失败: ${payload.error}` });
+                        break;
+                    case 'TRIGGER_DOWNLOAD_BLOB':
+                        // Service Worker 将 Blob 发送回来，由主线程触发下载
+                        this.triggerDownload(payload.blob, payload.filename);
+                        break;
+                }
+            });
+
+            this.onProgress({ status: '下载任务已发送至后台 Service Worker...' });
+            return;
+        }
+
+        // Service Worker 不可用时，回退到主线程下载 (保留原逻辑)
         try {
             this.onProgress({ status: '正在获取播放列表...' });
             const m3u8Response = await fetch(m3u8Url, {

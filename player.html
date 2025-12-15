@@ -285,14 +285,22 @@
     <script src="js/download-settings.js"></script>
     <script src="js/download-settings-ui.js"></script>
     <script src="js/m3u8-downloader.js"></script>
-    <script src="js/download-manager.js"></script>
+
     <script src="js/batch-download.js"></script>
     <script src="js/player.js"></script>
 
     <script>
-        // 确保下载管理器在页面加载后初始化
-        if (window.DownloadManager && !window.downloadManager) {
-            window.downloadManager = new window.DownloadManager();
+        // 注册 Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+                    .then(registration => {
+                        console.log('Service Worker registered: ', registration);
+                    })
+                    .catch(registrationError => {
+                        console.log('Service Worker registration failed: ', registrationError);
+                    });
+            });
         }
         
         // 创建全局环境变量对象

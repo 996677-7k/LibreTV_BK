@@ -227,43 +227,41 @@ function startBatchDownload() {
         return;
     }
     
-    // 检查下载管理器是否可用
-    if (!window.downloadManager) {
+    // 检查 Service Worker 是否可用
+    if (!('serviceWorker' in navigator && navigator.serviceWorker.controller)) {
         if (typeof showToast === 'function') {
-            showToast('下载管理器未加载', 'error');
+            showToast('Service Worker 未加载，无法进行后台批量下载', 'error');
         }
         return;
     }
     
-    // 构建下载任务列表
-    const tasks = [];
     const selectedArray = Array.from(selectedEpisodes).sort((a, b) => a - b);
+    let tasksSent = 0;
     
     selectedArray.forEach(index => {
         const episode = currentEpisodes[index];
-        const episodeName = episode.name || `第${index + 1}集`;
         
+        // 构造文件名
         let filename = currentVideoTitle;
+        let episodeName = episode.name || `第${index + 1}集`;
         filename += ` - ${episodeName}`;
         filename = filename.replace(/[\\/:*?"<>|]/g, '_');
         filename += '.mp4';
-        
-        tasks.push({
-            title: currentVideoTitle,
-            episode: episodeName,
-            url: episode,
-            filename: filename
-        });
+
+        // 检查 URL 是否存在
+        if (episode.url) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'START_DOWNLOAD',
+                payload: { m3u8Url: episode.url, filename }
+            });
+            tasksSent++;
+        }
     });
-    
-    // 添加到下载管理器
-    window.downloadManager.addBatchDownloads(tasks);
-    window.downloadManager.showPanel();
     
     // 退出批量下载模式
     toggleBatchDownloadMode();
     
     if (typeof showToast === 'function') {
-        showToast(`已添加 ${tasks.length} 个下载任务`, 'success');
+        showToast(`已将 ${tasksSent} 个任务发送至后台下载`, 'success');
     }
 }

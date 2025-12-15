@@ -91,8 +91,6 @@ function downloadVideo(event) {
 
     // 检查视频URL是否是M3U8格式
     if (currentVideoUrl.toLowerCase().includes('.m3u8') || currentVideoUrl.toLowerCase().includes('.m3u')) {
-        // 使用下载管理器（后台下载）
-        showToast('正在添加到下载队列...', 'info');
         
         // 生成文件名
         let filename = currentVideoTitle;
@@ -104,19 +102,52 @@ function downloadVideo(event) {
         }
         filename = filename.replace(/[\\/:*?"<>|]/g, '_');
         filename += '.mp4';
-        
-        // 添加到下载管理器
-        if (window.downloadManager) {
-            window.downloadManager.addDownload({
-                title: currentVideoTitle,
-                episode: episodeName,
-                url: currentVideoUrl,
-                filename: filename
+
+        // 使用 Service Worker 进行后台下载
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'START_DOWNLOAD',
+                payload: { m3u8Url: currentVideoUrl, filename }
             });
-            window.downloadManager.showPanel();
-        } else {
-            showToast('下载管理器未加载', 'error');
+            
+            showToast(`"${filename}" 的下载任务已发送至后台。`, 'info');
+            return;
         }
+
+        // Service Worker 不可用时，回退到主线程下载 (保留旧的 M3U8Downloader 逻辑)
+        showToast('Service Worker 不可用，正在主线程下载...', 'info');
+        
+        const modal = document.getElementById('m3u8DownloadModal');
+        const progressText = document.getElementById('m3u8ProgressText');
+        const downloadStatus = document.getElementById('m3u8DownloadStatus');
+        const closeBtn = document.getElementById('m3u8CloseBtn');
+
+        if (modal) {
+            modal.classList.remove('hidden');
+            progressText.textContent = '正在主线程下载...';
+            downloadStatus.textContent = '';
+            closeBtn.onclick = () => modal.classList.add('hidden');
+        }
+
+        const downloader = new window.M3U8Downloader({
+            onProgress: (progress) => {
+                if (progress.percent !== undefined) {
+                    const progressBar = document.getElementById('m3u8ProgressBar');
+                    if (progressBar) progressBar.style.width = progress.percent + '%';
+                    if (progressText) progressText.textContent = `${progress.percent}% (${progress.loaded}/${progress.total})`;
+                }
+                if (downloadStatus) downloadStatus.textContent = progress.status || '';
+            },
+            onComplete: (result) => {
+                if (downloadStatus) downloadStatus.textContent = `下载完成！文件大小: ${(result.size / (1024 * 1024)).toFixed(2)}MB`;
+                if (closeBtn) closeBtn.textContent = '关闭';
+            },
+            onError: (error) => {
+                if (downloadStatus) downloadStatus.textContent = `下载失败: ${error.message}`;
+                if (closeBtn) closeBtn.textContent = '关闭';
+            }
+        });
+        downloader.download(currentVideoUrl, filename);
         return;
     }
 
