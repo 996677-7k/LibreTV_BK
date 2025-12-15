@@ -177,13 +177,18 @@ class DownloadManager {
     /**
      * 开始单个下载任务
      */
-    async startDownload(download) {
+        async startDownload(download) {
         download.status = 'downloading';
         this.activeDownloads++;
         this.updateUI();
 
         try {
-            const downloader = new window.M3U8Downloader({
+            // 确保 M3U8Downloader 是一个可实例化的类
+            if (typeof window.M3U8Downloader !== 'function') {
+                throw new Error('M3U8Downloader 类未正确加载或不是一个构造函数。');
+            }
+            
+            const downloader = new window.M3U8Downloader({r({
                 onProgress: (progress) => {
                     if (progress.percent !== undefined) {
                         download.progress = progress.percent;

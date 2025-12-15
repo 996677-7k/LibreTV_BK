@@ -3,7 +3,8 @@
  * 支持并发下载、进度显示、自动合并
  */
 
-class M3U8Downloader {
+(function() {
+    class M3U8Downloader {
     constructor(options = {}) {
         // 从DownloadSettings获取配置，如果没有则使用传入的options
         const settings = window.DownloadSettings ? window.DownloadSettings.getAll() : {};
@@ -326,6 +327,8 @@ class M3U8Downloader {
 // 导出 M3U8Downloader 类到全局
 window.M3U8Downloader = M3U8Downloader;
 
+})();
+
 /**
  * 全局M3U8下载函数
  */
@@ -347,7 +350,7 @@ window.downloadM3U8Video = async function(m3u8Url, filename) {
     const downloadStatus = document.getElementById('m3u8DownloadStatus');
     const closeBtn = document.getElementById('m3u8CloseBtn');
 
-    const downloader = new window.M3U8Downloader({
+    const downloader = new M3U8Downloader({
         onProgress: (progress) => {
             if (progress.percent !== undefined) {
                 if (progressBar) progressBar.style.width = progress.percent + '%';
