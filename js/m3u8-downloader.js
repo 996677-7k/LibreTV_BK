@@ -323,6 +323,9 @@ class M3U8Downloader {
     }
 }
 
+// 导出 M3U8Downloader 类到全局
+window.M3U8Downloader = M3U8Downloader;
+
 /**
  * 全局M3U8下载函数
  */
