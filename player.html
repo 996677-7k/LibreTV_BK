@@ -13,7 +13,6 @@
 
     <script src="libs/tailwindcss.min.js"></script>
     <script src="js/version-check.js"></script>
-    <script src="js/m3u8-downloader.js"></script>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/player.css">
     
@@ -134,31 +133,6 @@
                         </svg>
                     </button>
                     
-                    <!-- 下载按钮 -->
-                    <button id="downloadButton" title="下载当前视频" onclick="downloadVideo(); return false;" 
-                            class="px-2 py-1 bg-[#222] hover:bg-[#333] border border-[#333] text-white rounded-lg transition flex-shrink-0">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                        </svg>
-                    </button>
-                    
-                    <!-- 批量下载按钮 -->
-                    <button id="batchDownloadButton" title="批量下载" onclick="toggleBatchDownloadMode()" 
-                            class="px-2 py-1 bg-[#222] hover:bg-[#333] border border-[#333] text-white rounded-lg transition flex-shrink-0">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                    </button>
-                    
-                    <!-- 下载设置按钮 -->
-                    <button id="downloadSettingsButton" title="下载设置" onclick="DownloadSettingsUI.show()" 
-                            class="px-2 py-1 bg-[#222] hover:bg-[#333] border border-[#333] text-white rounded-lg transition flex-shrink-0">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                        </svg>
-                    </button>
-                    
                     <!-- 锁定控制按钮 - 始终显示在最右侧 -->
                     <button id="lockToggle" onclick="toggleControlsLock()" title="锁定控制" 
                             class="px-2 py-1 bg-[#222] hover:bg-[#333] border border-[#333] text-white rounded-lg transition flex-shrink-0">
@@ -234,30 +208,6 @@
         </div>
     </div>
 
-    <!-- M3U8下载对话框 -->
-    <div id="m3u8DownloadModal" class="fixed inset-0 bg-black/95 hidden flex items-center justify-center z-[10002]">
-        <div class="bg-[#111] p-8 rounded-lg w-11/12 max-w-md border border-[#333] flex flex-col">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold gradient-text">M3U8视频下载</h2>
-                <button onclick="document.getElementById('m3u8DownloadModal').classList.add('hidden')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
-            </div>
-            
-            <div class="mb-6">
-                <div id="m3u8DownloadStatus" class="text-gray-300 text-sm mb-4">准备下载...</div>
-                
-                <div class="w-full bg-gray-700 rounded-full h-2 overflow-hidden mb-2">
-                    <div id="m3u8ProgressBar" class="bg-blue-500 h-full transition-all duration-300" style="width: 0%"></div>
-                </div>
-                
-                <div id="m3u8ProgressText" class="text-gray-400 text-xs text-right">0%</div>
-            </div>
-            
-            <button id="m3u8CloseBtn" onclick="document.getElementById('m3u8DownloadModal').classList.add('hidden')" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
-                关闭
-            </button>
-        </div>
-    </div>
-
     <!-- 添加 loading 提示框 -->
     <div id="loading" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-[10001]">
         <div class="bg-[#111] p-8 rounded-lg border border-[#333] flex items-center space-x-4">
@@ -282,10 +232,6 @@
     <script src="js/ui.js"></script>
     <script src="js/api.js"></script>
     <script src="js/search.js"></script>
-    <script src="js/download-settings.js"></script>
-    <script src="js/download-settings-ui.js"></script>
-    <script src="js/download-manager.js"></script>
-    <script src="js/batch-download.js"></script>
     <script src="js/player.js"></script>
 
     <script>
