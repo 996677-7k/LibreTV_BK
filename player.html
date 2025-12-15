@@ -13,6 +13,7 @@
 
     <script src="libs/tailwindcss.min.js"></script>
     <script src="js/version-check.js"></script>
+    <script src="js/m3u8-downloader.js"></script>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/player.css">
     
@@ -213,6 +214,30 @@
                 <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- M3U8下载对话框 -->
+    <div id="m3u8DownloadModal" class="fixed inset-0 bg-black/95 hidden flex items-center justify-center z-[10002]">
+        <div class="bg-[#111] p-8 rounded-lg w-11/12 max-w-md border border-[#333] flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold gradient-text">M3U8视频下载</h2>
+                <button onclick="document.getElementById('m3u8DownloadModal').classList.add('hidden')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            
+            <div class="mb-6">
+                <div id="m3u8DownloadStatus" class="text-gray-300 text-sm mb-4">准备下载...</div>
+                
+                <div class="w-full bg-gray-700 rounded-full h-2 overflow-hidden mb-2">
+                    <div id="m3u8ProgressBar" class="bg-blue-500 h-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                
+                <div id="m3u8ProgressText" class="text-gray-400 text-xs text-right">0%</div>
+            </div>
+            
+            <button id="m3u8CloseBtn" onclick="document.getElementById('m3u8DownloadModal').classList.add('hidden')" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors">
+                关闭
+            </button>
         </div>
     </div>
 
