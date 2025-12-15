@@ -194,7 +194,12 @@
             try {
                 // 确保 M3U8Downloader 是一个可实例化的类
                 if (typeof window.M3U8Downloader !== 'function') {
-                    throw new Error('M3U8Downloader 类未正确加载。');
+                    // 尝试从父窗口获取 M3U8Downloader，作为最终回退
+                    if (window.opener && window.opener.M3U8Downloader) {
+                        window.M3U8Downloader = window.opener.M3U8Downloader;
+                    } else {
+                        throw new Error('M3U8Downloader 类未正确加载。');
+                    }
                 }
                 
                 const downloader = new window.M3U8Downloader({

@@ -264,8 +264,14 @@ function startBatchDownload() {
     // 将任务数据编码为 URL 参数
     const taskParam = encodeURIComponent(JSON.stringify(tasks));
     
+    // 计算窗口位置：右侧
+    const width = 400;
+    const height = 600;
+    const left = window.screen.width - width;
+    const top = 0;
+
     // 打开下载工作页面
-    window.open(`/download-worker.html?tasks=${taskParam}`, 'LibreTVDownloadWorker', 'width=400,height=600,left=0,top=0');
+    window.open(`/download-worker.html?tasks=${taskParam}`, 'LibreTVDownloadWorker', `width=${width},height=${height},left=${left},top=${top}`);
 
     // 退出批量下载模式
     toggleBatchDownloadMode();
