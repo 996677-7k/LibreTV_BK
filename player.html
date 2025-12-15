@@ -290,6 +290,11 @@
     <script src="js/player.js"></script>
 
     <script>
+        // 确保下载管理器在页面加载后初始化
+        if (window.DownloadManager && !window.downloadManager) {
+            window.downloadManager = new window.DownloadManager();
+        }
+        
         // 创建全局环境变量对象
         window.__ENV__ = window.__ENV__ || {};
         
