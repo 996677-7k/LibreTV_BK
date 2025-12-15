@@ -91,18 +91,25 @@ function downloadVideo(event) {
 
     // 检查视频URL是否是M3U8格式
     if (currentVideoUrl.toLowerCase().includes('.m3u8') || currentVideoUrl.toLowerCase().includes('.m3u')) {
-        // M3U8文件不能直接下载，需要使用专门的工具
-        showToast('M3U8/M3U格式视频无法直接下载，请使用专业的下载工具（如IDM、N_m3u8DL-CLI等）', 'warning');
+        // 使用内置M3U8下载器
+        showToast('正在启动M3U8视频下载...', 'info');
         
-        // 尝试复制链接到剪贴板
-        copyToClipboard(currentVideoUrl)
-            .then(() => {
-                showToast('M3U8/M3U链接已复制到剪贴板', 'success');
-            })
-            .catch(err => {
-                console.error('复制链接失败:', err);
-                showToast('复制链接失败，请手动复制', 'error');
-            });
+        // 生成文件名
+        let filename = currentVideoTitle;
+        if (currentEpisodes.length > 0) {
+            const episode = currentEpisodes[currentEpisodeIndex];
+            const episodeName = episode.name || `第${currentEpisodeIndex + 1}集`;
+            filename += ` - ${episodeName}`;
+        }
+        filename = filename.replace(/[\\/:*?"<>|]/g, '_');
+        filename += '.ts';
+        
+        // 调用M3U8下载器
+        if (typeof downloadM3U8Video === 'function') {
+            downloadM3U8Video(currentVideoUrl, filename);
+        } else {
+            showToast('M3U8下载器未加载', 'error');
+        }
         return;
     }
 
