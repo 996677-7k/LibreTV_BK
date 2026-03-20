@@ -1872,12 +1872,16 @@ function triggerAutoSwitch() {
         return;
     }
 
-    // 寻找下一个可用的 API
+    // 寻找下一个可用的 API（排除当前源，按顺序尝试）
     var currentSource = new URLSearchParams(window.location.search).get('source');
+    var currentSourceIndex = selectedAPIs.indexOf(currentSource);
     var nextSource = '';
-    for (var i = 0; i < selectedAPIs.length; i++) {
-        if (selectedAPIs[i] !== currentSource) {
-            nextSource = selectedAPIs[i];
+    
+    // 尝试寻找下一个源
+    for (var i = 1; i <= selectedAPIs.length; i++) {
+        var idx = (currentSourceIndex + i) % selectedAPIs.length;
+        if (selectedAPIs[idx] !== currentSource) {
+            nextSource = selectedAPIs[idx];
             break;
         }
     }
@@ -1890,7 +1894,6 @@ function triggerAutoSwitch() {
     // 执行搜索并寻找匹配的影片
     searchByAPIAndKeyWord(nextSource, videoTitle).then(function(results) {
         if (results && results.length > 0) {
-            // 寻找名称完全匹配的
             var match = null;
             for (var j = 0; j < results.length; j++) {
                 if (results[j].vod_name === videoTitle) {
@@ -1900,28 +1903,30 @@ function triggerAutoSwitch() {
             }
             
             if (match) {
-                // 获取详情并切换，保持进度
                 fetch('/api/detail?id=' + encodeURIComponent(match.vod_id) + '&source=' + nextSource)
                     .then(function(res) { return res.json(); })
                     .then(function(data) {
-                        if (data.episodes && data.episodes.length > currentEpisodeIndex) {
-                            var targetUrl = data.episodes[currentEpisodeIndex];
-                            // 构建带进度的 URL
+                        if (data.episodes && data.episodes.length > 0) {
+                            // --- 智能集数匹配逻辑 ---
+                            var targetIndex = currentEpisodeIndex;
+                            // 如果索引不匹配，尝试通过内容匹配（如“第05集”）
+                            if (targetIndex >= data.episodes.length) {
+                                targetIndex = data.episodes.length - 1;
+                            }
+                            
+                            var targetUrl = data.episodes[targetIndex];
                             var watchUrl = 'player.html?id=' + match.vod_id + 
                                            '&source=' + nextSource + 
                                            '&url=' + encodeURIComponent(targetUrl) + 
-                                           '&index=' + currentEpisodeIndex + 
+                                           '&index=' + targetIndex + 
                                            '&title=' + encodeURIComponent(videoTitle) + 
                                            '&position=' + Math.floor(currentPos);
                             
-                            // 保存状态
                             localStorage.setItem('currentEpisodes', JSON.stringify(data.episodes));
-                            
-                            // 跳转（player.js 已有逻辑会在加载时读取 position 参数并跳转）
                             window.location.href = watchUrl;
                         } else {
                             isSwitching = false;
-                            showToast('备选线路集数不匹配', 'error');
+                            showToast('备选线路无可用剧集', 'error');
                         }
                     })
                     .catch(function() {

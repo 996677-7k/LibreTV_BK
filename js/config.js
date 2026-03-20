@@ -178,6 +178,26 @@ const API_SITES = {
         api: 'https://bfzyapi.com/api.php/provide/vod/',
         name: '暴风资源'
     },
+    lzi: {
+        api: 'https://cj.lziapi.com/api.php/provide/vod/',
+        name: '量子资源'
+    },
+    kczy: {
+        api: 'https://www.kczyapi.com/api.php/provide/vod/',
+        name: '快车资源'
+    },
+    guangsu: {
+        api: 'https://www.guangsuapi.com/api.php/provide/vod/',
+        name: '光速资源'
+    },
+    sony: {
+        api: 'https://suoniapi.com/api.php/provide/vod/',
+        name: '索尼资源'
+    },
+    hongniu: {
+        api: 'https://www.hongniuzyw.com/api.php/provide/vod/',
+        name: '红牛资源'
+    },
     testSource: {
         api: 'https://www.example.com/api.php/provide/vod',
         name: '空内容测试源',
