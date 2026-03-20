@@ -1810,7 +1810,7 @@ var autoSwitchEnabled = false;
 var autoSwitchThreshold = 8000; // 8秒卡顿触发切换
 var lastPlayTimeUpdate = Date.now();
 var lastAutoSwitchCheck = Date.now();
-var autoSwitchInterval = 5 * 60 * 1000; // 每5分钟检测一次
+var autoSwitchInterval = 1 * 60 * 1000; // 每1分钟检测一次
 var isSwitching = false;
 
 // 初始化自动切线开关
