@@ -1822,6 +1822,13 @@ var isSwitching = false;
 var playerStartTime = Date.now();
 var hasStartedPlaying = false;
 
+// 新增：高频微卡顿监控变量
+var stallCount = 0; // 卡顿计数器
+var stallResetInterval = 60 * 1000; // 1分钟重置周期
+var lastStallResetTime = Date.now();
+var maxStallLimit = 5; // 1分钟内允许的最大卡顿次数
+var isStalled = false; // 当前是否处于卡顿状态
+
 // 初始化自动切线开关
 function initAutoSwitch() {
     var toggle = document.getElementById('autoSwitchToggle');
@@ -1856,12 +1863,38 @@ function checkPlaybackStalled() {
         }
     }
 
-    // 2. 处理播放中卡顿（每1分钟检测一次）
+    // 2. 处理高频微卡顿监控（1分钟内超过5次卡顿即切线）
+    // 如果视频应该在播放，但进度没有更新，且当前未标记为卡顿
+    if (!art.video.paused && (currentTime - lastPlayTimeUpdate > 2000)) { // 超过2秒没更新即视为一次微卡顿
+        if (!isStalled) {
+            isStalled = true;
+            stallCount++;
+            console.log('检测到一次微卡顿，当前累计次数：', stallCount);
+            
+            // 检查是否达到切换阈值
+            if (stallCount >= maxStallLimit) {
+                console.warn('1分钟内频繁卡顿（已达5次），准备强制自动切换线路...');
+                stallCount = 0; // 重置计数
+                triggerAutoSwitch();
+                return;
+            }
+        }
+    } else {
+        isStalled = false; // 恢复播放，重置卡顿标记
+    }
+
+    // 每分钟重置一次卡顿计数器
+    if (currentTime - lastStallResetTime > stallResetInterval) {
+        stallCount = 0;
+        lastStallResetTime = currentTime;
+    }
+
+    // 3. 处理常规播放中卡顿（每1分钟检测一次）
     if (currentTime - lastAutoSwitchCheck < autoSwitchInterval) return;
 
-    // 如果视频应该在播放，但进度没有更新
+    // 如果视频应该在播放，但进度没有更新（长达8秒）
     if (!art.video.paused && (currentTime - lastPlayTimeUpdate > autoSwitchThreshold)) {
-        console.warn('检测到播放卡顿，且已过1分钟检测周期，准备自动切换线路...');
+        console.warn('检测到严重播放卡顿，且已过1分钟检测周期，准备自动切换线路...');
         lastAutoSwitchCheck = currentTime; // 重置检测周期
         triggerAutoSwitch();
     }
