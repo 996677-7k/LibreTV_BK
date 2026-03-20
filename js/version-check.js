@@ -198,10 +198,12 @@ document.addEventListener('DOMContentLoaded', addVersionInfoToFooter);
         isModern = false;
     }
 
-    // 检查 Win7 环境
+    // 检查 Win7 环境和 360 浏览器
     var isWin7 = navigator.userAgent.indexOf('Windows NT 6.1') > -1;
+    var is360 = navigator.userAgent.indexOf('QIHU') > -1 || navigator.userAgent.indexOf('360SE') > -1;
     
-    if (!isModern || isWin7) {
+    if (!isModern || isWin7 || is360) {
+        window.__LEGACY_MODE__ = true;
         console.warn('检测到旧版操作系统或浏览器环境，正在启动兼容性模式...');
         
         // 动态添加 Polyfill
@@ -209,15 +211,22 @@ document.addEventListener('DOMContentLoaded', addVersionInfoToFooter);
         polyfill.src = 'https://cdnjs.cloudflare.com/ajax/libs/polyfill/3.111.0/polyfill.min.js';
         document.head.appendChild(polyfill);
 
-        // Win7 专属提示
+        // Win7/360 专属提示与性能优化
         window.addEventListener('load', function() {
+            // 针对 360 浏览器禁用复杂动画以节省 CPU
+            if (is360) {
+                var style = document.createElement('style');
+                style.textContent = '* { animation: none !important; transition: none !important; } .animate-spin { animation: spin 1s linear infinite !important; }';
+                document.head.appendChild(style);
+            }
+
             var hasShownTip = localStorage.getItem('win7_browser_tip_shown');
-            if (isWin7 && !hasShownTip) {
+            if ((isWin7 || is360) && !hasShownTip) {
                 var tipDiv = document.createElement('div');
                 tipDiv.id = 'win7-compat-tip';
                 tipDiv.style.cssText = 'position:fixed; bottom:20px; left:20px; right:20px; background:#d97706; color:white; padding:15px; border-radius:8px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1); z-index:9999; display:flex; justify-content:space-between; align-items:center;';
-                tipDiv.innerHTML = '<div><strong>温馨提示：</strong>检测到您正在使用 Windows 7 系统。为了获得最佳画质优化和流畅播放体验，强烈建议安装最新版 <a href="https://www.google.cn/chrome/" target="_blank" style="text-decoration:underline;font-weight:bold;color:white;">Chrome 浏览器</a>。</div>' +
-                                   '<button id="closeWin7Tip" style="margin-left:15px; background:rgba(0,0,0,0.2); border:none; color:white; padding:5px 10px; border-radius:4px; cursor:pointer;">不再提示</button>';
+                tipDiv.innerHTML = '<div><strong>温馨提示：</strong>检测到您正在 Windows 7 或旧版浏览器上运行。已为您开启<b>“极速兼容模式”</b>：已降低内存占用并优化了加载逻辑，确保流畅播放。</div>' +
+                                   '<button id="closeWin7Tip" style="margin-left:15px; background:rgba(0,0,0,0.2); border:none; color:white; padding:5px 10px; border-radius:4px; cursor:pointer;">知道了</button>';
                 document.body.appendChild(tipDiv);
                 
                 document.getElementById('closeWin7Tip').onclick = function() {

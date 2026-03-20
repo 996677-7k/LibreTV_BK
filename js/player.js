@@ -408,39 +408,40 @@ function initPlayer(videoUrl) {
         art = null;
     }
 
-    // 配置HLS.js选项 - 针对晚间高峰期进行优化
+    // 配置HLS.js选项 - 针对不同设备环境进行动态优化
+    const isLegacy = window.__LEGACY_MODE__ || (navigator.userAgent.indexOf('Windows NT 6.1') > -1);
     const hlsConfig = {
         debug: false,
         loader: adFilteringEnabled ? CustomHlsJsLoader : Hls.DefaultConfig.loader,
-        enableWorker: true,
+        enableWorker: !isLegacy, // 旧设备禁用 Worker 避免主线程竞争
         lowLatencyMode: false,
-        // 增加缓冲区长度，应对网络波动
-        backBufferLength: 120,
-        maxBufferLength: 60,      // 增加到60秒
-        maxMaxBufferLength: 120,  // 最大增加到120秒
-        maxBufferSize: 100 * 1000 * 1000, // 增加到100MB
+        // 针对旧设备（Win7/360）减小缓冲区，防止内存溢出导致卡顿
+        backBufferLength: isLegacy ? 30 : 120,
+        maxBufferLength: isLegacy ? 15 : 60,      
+        maxMaxBufferLength: isLegacy ? 30 : 120,  
+        maxBufferSize: isLegacy ? (20 * 1000 * 1000) : (100 * 1000 * 1000), 
         maxBufferHole: 0.5,
-        // 增加重试次数和超时时间
-        fragLoadingMaxRetry: 10,
+        // 增加重试频率，应对旧设备网络栈延迟
+        fragLoadingMaxRetry: 15,
         fragLoadingMaxRetryTimeout: 120000,
-        fragLoadingRetryDelay: 500,
-        manifestLoadingMaxRetry: 5,
-        manifestLoadingRetryDelay: 500,
-        levelLoadingMaxRetry: 6,
-        levelLoadingRetryDelay: 500,
-        startLevel: -1, // 自动选择最佳画质
+        fragLoadingRetryDelay: 300,
+        manifestLoadingMaxRetry: 8,
+        manifestLoadingRetryDelay: 300,
+        levelLoadingMaxRetry: 8,
+        levelLoadingRetryDelay: 300,
+        startLevel: isLegacy ? 0 : -1, // 旧设备从最低画质起播，平滑后再自动升质
         // 优化带宽估算算法
-        abrEwmaDefaultEstimate: 1000000, // 初始估算提高到1Mbps
+        abrEwmaDefaultEstimate: 500000, 
         abrBandWidthFactor: 0.9,
         abrBandWidthUpFactor: 0.5,
         abrMaxWithRealBitrate: true,
         stretchShortVideoTrack: true,
-        appendErrorMaxRetry: 10,
+        appendErrorMaxRetry: 15,
         liveSyncDurationCount: 3,
         liveDurationInfinity: false,
         // 启用分片预取
-        enableWebCrypto: true,
-        capLevelToPlayerSize: false,
+        enableWebCrypto: !isLegacy,
+        capLevelToPlayerSize: true,
         ignoreDevicePixelRatio: true
     };
 
