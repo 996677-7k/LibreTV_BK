@@ -589,6 +589,10 @@ function resetSearchArea() {
 
     // 如果有豆瓣功能，检查是否需要显示豆瓣推荐区域
     if (typeof updateDoubanVisibility === 'function') {
+        const doubanArea = document.getElementById('doubanArea');
+        if (doubanArea) {
+            doubanArea.style.display = ''; // 恢复默认显示方式
+        }
         updateDoubanVisibility();
     }
 
@@ -617,6 +621,13 @@ function getCustomApiInfo(customApiIndex) {
 
 // 搜索功能 - 修改为支持多选API和多页结果
 async function search() {
+    // 立即强制隐藏豆瓣推荐区域，确保搜索结果纯净
+    const doubanArea = document.getElementById('doubanArea');
+    if (doubanArea) {
+        doubanArea.style.display = 'none';
+        doubanArea.classList.add('hidden');
+    }
+
     // 密码保护校验
     if (window.isPasswordProtected && window.isPasswordVerified) {
         if (window.isPasswordProtected() && !window.isPasswordVerified()) {
