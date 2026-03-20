@@ -499,6 +499,9 @@ function renderDoubanCards(data, container) {
     // 创建文档片段以提高性能
     const fragment = document.createDocumentFragment();
     
+    // 定义严格的过滤关键词
+    const filteredKeywords = ['伦理', '福利', '里番', '门事件', '萝莉', '诱惑', '传媒', '黑丝', '无码', '有码', 'SWAG', '网红', '色情', '同性', '福利', '写真', '成人', '18禁'];
+    
     // 如果没有数据
     if (!data.subjects || data.subjects.length === 0) {
         const emptyEl = document.createElement("div");
@@ -508,56 +511,77 @@ function renderDoubanCards(data, container) {
         `;
         fragment.appendChild(emptyEl);
     } else {
-        // 循环创建每个影视卡片
-        data.subjects.forEach(item => {
-            const card = document.createElement("div");
-            card.className = "bg-[#111] hover:bg-[#222] transition-all duration-300 rounded-lg overflow-hidden flex flex-col transform hover:scale-105 shadow-md hover:shadow-lg";
-            
-            // 生成卡片内容，确保安全显示（防止XSS）
-            const safeTitle = item.title
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-            
-            const safeRate = (item.rate || "暂无")
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
-            
-            // 处理图片URL
-            // 1. 直接使用豆瓣图片URL (添加no-referrer属性)
-            const originalCoverUrl = item.cover;
-            
-            // 2. 也准备代理URL作为备选
-            const proxiedCoverUrl = PROXY_URL + encodeURIComponent(originalCoverUrl);
-            
-            // 为不同设备优化卡片布局
-            card.innerHTML = `
-                <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
-                    <img src="${originalCoverUrl}" alt="${safeTitle}" 
-                        class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onerror="this.onerror=null; this.src='${proxiedCoverUrl}'; this.classList.add('object-contain');"
-                        loading="lazy" referrerpolicy="no-referrer">
-                    <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
-                    <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
-                        <span class="text-yellow-400">★</span> ${safeRate}
-                    </div>
-                    <div class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm hover:bg-[#333] transition-colors">
-                        <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
-                            🔗
-                        </a>
-                    </div>
-                </div>
-                <div class="p-2 text-center bg-[#111]">
-                    <button onclick="fillAndSearchWithDouban('${safeTitle}')" 
-                            class="text-sm font-medium text-white truncate w-full hover:text-pink-400 transition"
-                            title="${safeTitle}">
-                        ${safeTitle}
-                    </button>
-                </div>
-            `;
-            
-            fragment.appendChild(card);
+        // 过滤掉不相关的或低质量的内容
+        const filteredSubjects = data.subjects.filter(item => {
+            const title = (item.title || '').toLowerCase();
+            // 1. 过滤敏感关键词
+            if (filteredKeywords.some(keyword => title.includes(keyword))) return false;
+            // 2. 过滤评分过低的内容 (可选，豆瓣评分 0.0 通常是未上映或极冷门)
+            const rate = parseFloat(item.rate) || 0;
+            if (rate > 0 && rate < 2.0) return false;
+            return true;
         });
+
+        if (filteredSubjects.length === 0) {
+            const emptyEl = document.createElement("div");
+            emptyEl.className = "col-span-full text-center py-8";
+            emptyEl.innerHTML = `<div class="text-gray-500">此分类下暂无符合要求的推荐，请尝试其他分类</div>`;
+            fragment.appendChild(emptyEl);
+        } else {
+            // 循环创建每个影视卡片
+            filteredSubjects.forEach(item => {
+                const card = document.createElement("div");
+                card.className = "bg-[#111] hover:bg-[#222] transition-all duration-300 rounded-lg overflow-hidden flex flex-col transform hover:scale-105 shadow-md hover:shadow-lg border border-[#222] hover:border-pink-500/30";
+                
+                // 生成卡片内容，确保安全显示（防止XSS）
+                const safeTitle = item.title
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+                
+                const safeRate = (item.rate || "暂无")
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                
+                const originalCoverUrl = item.cover;
+                const proxiedCoverUrl = PROXY_URL + encodeURIComponent(originalCoverUrl);
+                
+                // 为高评分资源添加特别标识
+                const isHighRate = parseFloat(item.rate) >= 8.5;
+                const badgeHtml = isHighRate ? 
+                    `<div class="absolute top-2 left-2 bg-pink-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider z-10 shadow-sm">豆瓣高分</div>` : '';
+
+                card.innerHTML = `
+                    <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
+                        ${badgeHtml}
+                        <img src="${originalCoverUrl}" alt="${safeTitle}" 
+                            class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                            onerror="this.onerror=null; this.src='${proxiedCoverUrl}'; this.classList.add('object-contain');"
+                            loading="lazy" referrerpolicy="no-referrer">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80"></div>
+                        <div class="absolute bottom-2 left-2 flex items-center gap-1.5">
+                            <div class="bg-black/70 backdrop-blur-md text-white text-xs px-2 py-1 rounded border border-white/10 flex items-center">
+                                <span class="text-yellow-400 mr-1">★</span> ${safeRate}
+                            </div>
+                        </div>
+                        <div class="absolute bottom-2 right-2 bg-black/70 backdrop-blur-md text-white text-xs px-2 py-1 rounded border border-white/10 hover:bg-pink-600 transition-colors">
+                            <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
+                                豆瓣
+                            </a>
+                        </div>
+                    </div>
+                    <div class="p-3 text-center bg-[#111] border-t border-[#222]">
+                        <button onclick="fillAndSearchWithDouban('${safeTitle}')" 
+                                class="text-sm font-bold text-gray-200 truncate w-full hover:text-pink-500 transition-colors duration-300"
+                                title="${safeTitle}">
+                            ${safeTitle}
+                        </button>
+                    </div>
+                `;
+                
+                fragment.appendChild(card);
+            });
+        }
     }
     
     // 清空并添加所有新元素
