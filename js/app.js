@@ -38,9 +38,22 @@ document.addEventListener('DOMContentLoaded', function () {
         // 默认启用豆瓣功能
         localStorage.setItem('doubanEnabled', 'true');
 
-        // 标记已初始化默认值
-        localStorage.setItem('hasInitializedDefaults', 'true');
-    }
+    // 标记已初始化默认值
+    localStorage.setItem('hasInitializedDefaults', 'true');
+    // 设置版本号，用于强制更新
+    localStorage.setItem('site_version', '1.2.0');
+}
+
+// 强制更新逻辑：如果版本号不匹配，强制重置 API 选择以加载 44 个源
+const currentVersion = '1.2.0';
+if (localStorage.getItem('site_version') !== currentVersion) {
+    console.log('检测到新版本，正在强制更新 API 配置...');
+    const fullApiList = ["wolong", "lzi", "kczy", "guangsu", "sony", "hongniu", "jinying", "feisu", "tiankong", "jisu", "huohu", "baofeng", "sakura", "wujin", "zuid", "ikun", "ffzy", "heimuer", "dbzy", "baidu", "dyttzy", "ruyi", "tyyszy", "xiaomaomi", "zy360", "iqiyi", "hwba", "mozhua", "mdzy", "maotai", "xinlang", "baozha", "wwzy", "lehuo", "modu", "migu", "youku", "tengxun", "m3u8zy", "kuaiyun", "haojiu", "henan", "shandong"];
+    localStorage.setItem('selectedAPIs', JSON.stringify(fullApiList));
+    localStorage.setItem('site_version', currentVersion);
+    // 刷新页面变量
+    selectedAPIs = fullApiList;
+}
 
     // 设置黄色内容过滤器开关初始状态
     const yellowFilterToggle = document.getElementById('yellowFilterToggle');
@@ -647,7 +660,7 @@ async function search() {
         return;
     }
 
-    showLoading();
+    showLoading('正在全网检索 44 个高清资源源...');
 
     try {
         // 保存搜索历史
@@ -659,29 +672,40 @@ async function search() {
         // 即使没有勾选，也会在后台搜索所有内置源
         const apisToSearch = [...new Set([...selectedAPIs, ...allAvailableAPIs])];
 
-        // 从所有 API 源进行后台静默全量搜索
+        // 从所有 API 源进行后台静默全量搜索 - 分批次进行，解决 Win7/360 浏览器并发限制
         let allResults = [];
-        const searchPromises = apisToSearch.map(apiId => 
-            searchByAPIAndKeyWord(apiId, query)
-        );
+        const CHUNK_SIZE = 8; // 每批次请求8个API，分6批左右完成，确保老旧浏览器不崩溃
+        
+        for (let i = 0; i < apisToSearch.length; i += CHUNK_SIZE) {
+            const chunk = apisToSearch.slice(i, i + CHUNK_SIZE);
+            
+            // 更新进度提示
+            const progress = Math.min(100, Math.round((i / apisToSearch.length) * 100));
+            showLoading(`正在检索全网资源: ${progress}% ...`);
 
-        // 等待所有搜索请求完成
-        const resultsArray = await Promise.all(searchPromises);
+            const searchPromises = chunk.map(apiId => 
+                searchByAPIAndKeyWord(apiId, query)
+            );
 
-        // 合并所有结果，并保留来源信息
-        resultsArray.forEach((results, index) => {
-            if (Array.isArray(results) && results.length > 0) {
-                const apiId = apisToSearch[index];
-                const sourceName = API_SITES[apiId] ? API_SITES[apiId].name : '未知源';
-                
-                results.forEach(item => {
-                    // 确保每个结果都带有准确的来源名称和代码
-                    item.source_name = sourceName;
-                    item.source_code = apiId;
-                    allResults.push(item);
-                });
-            }
-        });
+            // 记录搜索进度
+            console.log(`正在搜索第 ${Math.floor(i / CHUNK_SIZE) + 1} 批次 API...`);
+
+            const resultsArray = await Promise.all(searchPromises);
+
+            // 合并当前批次结果
+            resultsArray.forEach((results, index) => {
+                if (Array.isArray(results) && results.length > 0) {
+                    const apiId = chunk[index];
+                    const sourceName = API_SITES[apiId] ? API_SITES[apiId].name : '未知源';
+                    
+                    results.forEach(item => {
+                        item.source_name = sourceName;
+                        item.source_code = apiId;
+                        allResults.push(item);
+                    });
+                }
+            });
+        }
 
         // 1. 强制关键词过滤：确保搜索结果标题中确实包含搜索词，防止某些API（如豆瓣资源）返回无关推荐
         const lowerQuery = query.toLowerCase();
