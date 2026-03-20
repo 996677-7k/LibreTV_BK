@@ -16,7 +16,7 @@ const SITE_CONFIG = {
     url: 'https://libretv.is-an.org',
     description: '免费在线视频搜索与观看平台',
     logo: 'image/logo.png',
-    version: '1.0.5'
+    version: '1.0.4'
 };
 
 // API站点配置 - 扩充至 43 个高质量、全面的 API 源
@@ -57,7 +57,7 @@ const API_SITES = {
     mdzy: { api: 'https://www.mdzyapi.com/api.php/provide/vod/', name: '魔都资源' },
     maotai: { api: 'https://api.maotaizy.com/api.php/provide/vod/', name: '茅台资源' },
 
-    // --- 高速扩容源 (31-43) ---
+    // --- 新增高速源 (31-43) ---
     xinlang: { api: 'https://api.xinlangapi.com/api.php/provide/vod/', name: '新浪资源' },
     baozha: { api: 'https://api.baozha.me/api.php/provide/vod/', name: '爆炸资源' },
     wwzy: { api: 'https://wwzy.tv/api.php/provide/vod/', name: '旺旺短剧' },
