@@ -162,6 +162,22 @@ const API_SITES = {
         api: 'https://m3u8.tiankongapi.com/api.php/provide/vod/',
         name: '天空资源'
     },
+    jinying: {
+        api: 'https://jyzyapi.com/provide/vod/',
+        name: '金鹰资源'
+    },
+    feisu: {
+        api: 'https://www.feisuzw.com/api/public/cms/publish/vod',
+        name: '飞速资源'
+    },
+    huohu: {
+        api: 'https://hhzyapi.com/api.php/provide/vod/',
+        name: '火狐资源'
+    },
+    baofeng: {
+        api: 'https://bfzyapi.com/api.php/provide/vod/',
+        name: '暴风资源'
+    },
     testSource: {
         api: 'https://www.example.com/api.php/provide/vod',
         name: '空内容测试源',

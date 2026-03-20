@@ -1,239 +1,95 @@
-// 添加动画样式
-(function() {
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.6;
-            }
-        }
-        .animate-pulse {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-    `;
-    document.head.appendChild(style);
-})();
-
-// 获取版本信息
-async function fetchVersion(url, errorMessage, options = {}) {
-    const response = await fetch(url, options);
-    if (!response.ok) {
-        throw new Error(errorMessage);
-    }
-    return await response.text();
-}
-
-// 版本检查函数
-async function checkForUpdates() {
-    try {
-        // 获取当前版本
-        const currentVersion = await fetchVersion('/VERSION.txt', '获取当前版本失败', {
-            cache: 'no-store'
-        });
-        
-        // 获取最新版本
-        let latestVersion;
-        const VERSION_URL = {
-            PROXY: 'https://ghfast.top/raw.githubusercontent.com/LibreSpark/LibreTV/main/VERSION.txt',
-            DIRECT: 'https://raw.githubusercontent.com/LibreSpark/LibreTV/main/VERSION.txt'
-        };
-        const FETCH_TIMEOUT = 1500;
-        
-        try {
-            // 尝试使用代理URL获取最新版本
-            const proxyPromise = fetchVersion(VERSION_URL.PROXY, '代理请求失败');
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('代理请求超时')), FETCH_TIMEOUT)
-            );
-            
-            latestVersion = await Promise.race([proxyPromise, timeoutPromise]);
-            console.log('通过代理服务器获取版本成功');
-        } catch (error) {
-            console.log('代理请求失败，尝试直接请求:', error.message);
-            try {
-                // 代理失败后尝试直接获取
-                latestVersion = await fetchVersion(VERSION_URL.DIRECT, '获取最新版本失败');
-                console.log('直接请求获取版本成功');
-            } catch (directError) {
-                console.error('所有版本检查请求均失败:', directError);
-                throw new Error('无法获取最新版本信息');
-            }
-        }
-        
-        console.log('当前版本:', currentVersion);
-        console.log('最新版本:', latestVersion);
-        
-        // 清理版本字符串（移除可能的空格或换行符）
-        const cleanCurrentVersion = currentVersion.trim();
-        const cleanLatestVersion = latestVersion.trim();
-        
-        // 返回版本信息
-        return {
-            current: cleanCurrentVersion,
-            latest: cleanLatestVersion,
-            hasUpdate: parseInt(cleanLatestVersion) > parseInt(cleanCurrentVersion),
-            currentFormatted: formatVersion(cleanCurrentVersion),
-            latestFormatted: formatVersion(cleanLatestVersion)
-        };
-    } catch (error) {
-        console.error('版本检测出错:', error);
-        throw error;
-    }
-}
-
-// 格式化版本号为可读形式 (yyyyMMddhhmm -> yyyy-MM-dd hh:mm)
-function formatVersion(versionString) {
-    // 检测版本字符串是否有效
-    if (!versionString) {
-        return '未知版本';
-    }
-    
-    // 清理版本字符串（移除可能的空格或换行符）
-    const cleanedString = versionString.trim();
-    
-    // 格式化标准12位版本号
-    if (cleanedString.length === 12) {
-        const year = cleanedString.substring(0, 4);
-        const month = cleanedString.substring(4, 6);
-        const day = cleanedString.substring(6, 8);
-        const hour = cleanedString.substring(8, 10);
-        const minute = cleanedString.substring(10, 12);
-        
-        return `${year}-${month}-${day} ${hour}:${minute}`;
-    }
-    
-    return cleanedString;
-}
-
-// 创建错误版本信息元素
-function createErrorVersionElement(errorMessage) {
-    const errorElement = document.createElement('p');
-    errorElement.className = 'text-gray-500 text-sm mt-1 text-center md:text-left';
-    errorElement.innerHTML = `版本: <span class="text-amber-500">检测失败</span>`;
-    errorElement.title = errorMessage;
-    return errorElement;
-}
-
-// 添加版本信息到页脚
-function addVersionInfoToFooter() {
-    checkForUpdates().then(result => {
-        if (!result) {
-            // 如果版本检测失败，显示错误信息
-            const versionElement = createErrorVersionElement();
-            // 在页脚显示错误元素
-            displayVersionElement(versionElement);
-            return;
-        }
-        
-        // 创建版本信息元素
-        const versionElement = document.createElement('p');
-        versionElement.className = 'text-gray-500 text-sm mt-1 text-center md:text-left';
-        
-        // 添加当前版本信息
-        versionElement.innerHTML = `版本: ${result.currentFormatted}`;
-        
-        // 如果有更新，添加更新提示
-        if (result.hasUpdate) {
-            versionElement.innerHTML += ` <span class="inline-flex items-center bg-red-600 text-white text-xs px-2 py-0.5 rounded-md ml-1 cursor-pointer animate-pulse font-medium">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                发现新版
-            </span>`;
-            
-            setTimeout(() => {
-                const updateBtn = versionElement.querySelector('span');
-                if (updateBtn) {
-                    updateBtn.addEventListener('click', () => {
-                        window.open('https://github.com/LibreSpark/LibreTV', '_blank');
-                    });
-                }
-            }, 100);
-        } else {
-            // 如果没有更新，显示当前版本为最新版本
-            versionElement.innerHTML = `版本: ${result.currentFormatted} <span class="text-green-500">(最新版本)</span>`;
-        }
-        
-        // 显示版本元素
-        displayVersionElement(versionElement);
-    }).catch(error => {
-        console.error('版本检测出错:', error);
-        // 创建错误版本信息元素并显示
-        const errorElement = createErrorVersionElement(`错误信息: ${error.message}`);
-        displayVersionElement(errorElement);
-    });
-}
-
-// 在页脚显示版本元素的辅助函数
-function displayVersionElement(element) {
-    // 获取页脚元素
-    const footerElement = document.querySelector('.footer p.text-gray-500.text-sm');
-    if (footerElement) {
-        // 在原版权信息后插入版本信息
-        footerElement.insertAdjacentElement('afterend', element);
-    } else {
-        // 如果找不到页脚元素，尝试在页脚区域最后添加
-        const footer = document.querySelector('.footer .container');
-        if (footer) {
-            footer.querySelector('div').appendChild(element);
-        }
-    }
-}
-
-// 页面加载完成后添加版本信息
-document.addEventListener('DOMContentLoaded', addVersionInfoToFooter);
-
 /**
- * LibreTV 浏览器兼容性检查与 Win7 优化
+ * LibreTV 浏览器兼容性检查与 Win7/360 极速模式提示
+ * 使用 ES3 语法以确保在旧版 360 浏览器中完美运行
  */
 (function() {
-    // 检查是否支持现代 JS 特性
+    // 1. 基础环境检查
     var isModern = true;
     try {
-        eval('var f = x => x; const a = 1; let b = 2; Promise.resolve();');
+        // 尝试执行 ES6 语法，如果失败则标记为旧版环境
+        new Function('var x = (y) => y; const z = 1; Promise.resolve();');
     } catch (e) {
         isModern = false;
     }
 
-    // 检查 Win7 环境和 360 浏览器
-    var isWin7 = navigator.userAgent.indexOf('Windows NT 6.1') > -1;
-    var is360 = navigator.userAgent.indexOf('QIHU') > -1 || navigator.userAgent.indexOf('360SE') > -1;
+    var ua = navigator.userAgent;
+    var isWin7 = ua.indexOf('Windows NT 6.1') > -1;
+    var is360 = ua.indexOf('QIHU') > -1 || ua.indexOf('360SE') > -1 || ua.indexOf('360EE') > -1;
     
+    // 2. 开启极速兼容模式
     if (!isModern || isWin7 || is360) {
         window.__LEGACY_MODE__ = true;
-        console.warn('检测到旧版操作系统或浏览器环境，正在启动兼容性模式...');
         
-        // 动态添加 Polyfill
+        // 动态添加基础补丁
         var polyfill = document.createElement('script');
         polyfill.src = 'https://cdnjs.cloudflare.com/ajax/libs/polyfill/3.111.0/polyfill.min.js';
-        document.head.appendChild(polyfill);
+        document.getElementsByTagName('head')[0].appendChild(polyfill);
 
-        // Win7/360 专属提示与性能优化
-        window.addEventListener('load', function() {
+        // 3. 页面加载后的提示与优化
+        var showCompatibilityTip = function() {
             // 针对 360 浏览器禁用复杂动画以节省 CPU
             if (is360) {
                 var style = document.createElement('style');
-                style.textContent = '* { animation: none !important; transition: none !important; } .animate-spin { animation: spin 1s linear infinite !important; }';
-                document.head.appendChild(style);
+                style.type = 'text/css';
+                var css = '* { animation: none !important; -webkit-animation: none !important; transition: none !important; -webkit-transition: none !important; } .animate-spin { -webkit-animation: spin 1s linear infinite !important; animation: spin 1s linear infinite !important; }';
+                if (style.styleSheet) {
+                    style.styleSheet.cssText = css;
+                } else {
+                    style.appendChild(document.createTextNode(css));
+                }
+                document.getElementsByTagName('head')[0].appendChild(style);
             }
 
-            var hasShownTip = localStorage.getItem('win7_browser_tip_shown');
-            if ((isWin7 || is360) && !hasShownTip) {
+            // 检查是否已显示过提示
+            var hasShownTip = false;
+            try {
+                hasShownTip = localStorage.getItem('legacy_mode_tip_shown') === 'true';
+            } catch(e) {}
+
+            if (!hasShownTip) {
                 var tipDiv = document.createElement('div');
-                tipDiv.id = 'win7-compat-tip';
-                tipDiv.style.cssText = 'position:fixed; bottom:20px; left:20px; right:20px; background:#d97706; color:white; padding:15px; border-radius:8px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1); z-index:9999; display:flex; justify-content:space-between; align-items:center;';
-                tipDiv.innerHTML = '<div><strong>温馨提示：</strong>检测到您正在 Windows 7 或旧版浏览器上运行。已为您开启<b>“极速兼容模式”</b>：已降低内存占用并优化了加载逻辑，确保流畅播放。</div>' +
-                                   '<button id="closeWin7Tip" style="margin-left:15px; background:rgba(0,0,0,0.2); border:none; color:white; padding:5px 10px; border-radius:4px; cursor:pointer;">知道了</button>';
+                tipDiv.id = 'legacy-compat-banner';
+                // 使用最基础的 CSS 属性确保渲染
+                tipDiv.style.position = 'fixed';
+                tipDiv.style.top = '0';
+                tipDiv.style.left = '0';
+                tipDiv.style.right = '0';
+                tipDiv.style.backgroundColor = '#0284c7';
+                tipDiv.style.color = '#ffffff';
+                tipDiv.style.padding = '10px 20px';
+                tipDiv.style.textAlign = 'center';
+                tipDiv.style.fontSize = '14px';
+                tipDiv.style.fontWeight = 'bold';
+                tipDiv.style.zIndex = '100000';
+                tipDiv.style.boxShadow = '0 2px 5px rgba(0,0,0,0.5)';
+                
+                tipDiv.innerHTML = '已为您开启 <span style="color:#fbbf24;">“极速兼容模式”</span>：已优化旧版浏览器加载逻辑，确保流畅播放。' +
+                                   '<button id="closeLegacyTip" style="margin-left:20px; background:#ffffff; color:#0284c7; border:none; padding:3px 10px; border-radius:4px; cursor:pointer; font-size:12px;">知道了</button>';
+                
                 document.body.appendChild(tipDiv);
                 
-                document.getElementById('closeWin7Tip').onclick = function() {
-                    tipDiv.style.display = 'none';
-                    localStorage.setItem('win7_browser_tip_shown', 'true');
-                };
+                var closeBtn = document.getElementById('closeLegacyTip');
+                if (closeBtn) {
+                    closeBtn.onclick = function() {
+                        tipDiv.style.display = 'none';
+                        try {
+                            localStorage.setItem('legacy_mode_tip_shown', 'true');
+                        } catch(e) {}
+                    };
+                }
+                
+                // 5秒后自动隐藏
+                setTimeout(function() {
+                    if (tipDiv) tipDiv.style.display = 'none';
+                }, 8000);
             }
-        });
+        };
+
+        // 绑定加载事件
+        if (window.addEventListener) {
+            window.addEventListener('load', showCompatibilityTip, false);
+        } else if (window.attachEvent) {
+            window.attachEvent('onload', showCompatibilityTip);
+        }
     }
 })();
