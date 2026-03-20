@@ -1,5 +1,5 @@
 // 全局变量
-let selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '["tyyszy","dyttzy", "bfzy", "ruyi"]'); // 默认选中资源
+let selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '["jszy", "feisu", "sony", "guangsu", "hongniu", "maotai"]'); // 默认选中高质量资源
 let customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]'); // 存储自定义API列表
 
 // 添加当前播放的集数索引
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 设置默认API选择（如果是第一次加载）
     if (!localStorage.getItem('hasInitializedDefaults')) {
         // 默认选中资源
-        selectedAPIs = ["tyyszy", "bfzy", "dyttzy", "ruyi"];
+        selectedAPIs = ["jszy", "feisu", "sony", "guangsu", "hongniu", "maotai"];
         localStorage.setItem('selectedAPIs', JSON.stringify(selectedAPIs));
 
         // 默认选中过滤开关
@@ -658,13 +658,32 @@ async function search() {
             }
         });
 
-        // 对搜索结果进行排序：按名称优先，名称相同时按接口源排序
+        // 对搜索结果进行排序：按名称相关性优先，名称相同时按接口源排序
+        const lowerQuery = query.toLowerCase();
         allResults.sort((a, b) => {
-            // 首先按照视频名称排序
-            const nameCompare = (a.vod_name || '').localeCompare(b.vod_name || '');
+            const nameA = (a.vod_name || '').toLowerCase();
+            const nameB = (b.vod_name || '').toLowerCase();
+            
+            // 1. 完全匹配
+            if (nameA === lowerQuery && nameB !== lowerQuery) return -1;
+            if (nameB === lowerQuery && nameA !== lowerQuery) return 1;
+            
+            // 2. 以搜索词开头
+            if (nameA.startsWith(lowerQuery) && !nameB.startsWith(lowerQuery)) return -1;
+            if (nameB.startsWith(lowerQuery) && !nameA.startsWith(lowerQuery)) return 1;
+            
+            // 3. 包含搜索词
+            if (nameA.includes(lowerQuery) && !nameB.includes(lowerQuery)) return -1;
+            if (nameB.includes(lowerQuery) && !nameA.includes(lowerQuery)) return 1;
+
+            // 4. 名称长度（短的通常更匹配）
+            if (nameA.length !== nameB.length) return nameA.length - nameB.length;
+            
+            // 5. 字母顺序
+            const nameCompare = nameA.localeCompare(nameB);
             if (nameCompare !== 0) return nameCompare;
             
-            // 如果名称相同，则按照来源排序
+            // 6. 来源排序
             return (a.source_name || '').localeCompare(b.source_name || '');
         });
 

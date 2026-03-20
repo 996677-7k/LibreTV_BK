@@ -114,6 +114,38 @@ const API_SITES = {
         api: 'https://cj.lziapi.com/api.php/provide/vod/',
         name: '量子资源站'
     },
+    jszy: {
+        api: 'https://jszyapi.com/api.php/provide/vod',
+        name: '极速资源'
+    },
+    feisu: {
+        api: 'https://www.feisuzyapi.com/api.php/provide/vod',
+        name: '飞速资源'
+    },
+    sony: {
+        api: 'https://suoniapi.com/api.php/provide/vod',
+        name: '索尼资源'
+    },
+    kczy: {
+        api: 'https://caiji.kczyapi.com/api.php/provide/vod',
+        name: '快车资源'
+    },
+    hongniu: {
+        api: 'https://www.hongniuzy2.com/api.php/provide/vod',
+        name: '红牛资源'
+    },
+    guangsu: {
+        api: 'https://api.guangsuapi.com/api.php/provide/vod',
+        name: '光速资源'
+    },
+    maotai: {
+        api: 'https://api.maotaizy.com/api.php/provide/vod',
+        name: '茅台资源'
+    },
+    xinlang: {
+        api: 'https://api.xinlangapi.com/api.php/provide/vod',
+        name: '新浪资源'
+    },
     testSource: {
         api: 'https://www.example.com/api.php/provide/vod',
         name: '空内容测试源',

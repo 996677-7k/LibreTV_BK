@@ -46,7 +46,26 @@ async function searchByAPIAndKeyWord(apiId, query) {
             source_name: apiName,
             source_code: apiId,
             api_url: apiId.startsWith('custom_') ? getCustomApiInfo(apiId.replace('custom_', ''))?.url : undefined
-        }));
+        })).filter(item => {
+            // 基础相关性过滤：标题必须包含搜索词中的主要部分，或者搜索词包含在标题中
+            const title = (item.vod_name || '').toLowerCase();
+            const lowerQuery = query.toLowerCase();
+            
+            // 如果标题完全匹配或包含查询词，保留
+            if (title.includes(lowerQuery) || lowerQuery.includes(title)) return true;
+            
+            // 如果查询词较长，检查是否有显著重叠
+            if (lowerQuery.length > 2) {
+                let matchCount = 0;
+                for (let i = 0; i < lowerQuery.length; i++) {
+                    if (title.includes(lowerQuery[i])) matchCount++;
+                }
+                // 如果匹配超过 50% 的字符，也保留（简单启发式）
+                if (matchCount / lowerQuery.length > 0.5) return true;
+            }
+            
+            return false;
+        });
         
         // 获取总页数
         const pageCount = data.pagecount || 1;

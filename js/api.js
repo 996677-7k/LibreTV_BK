@@ -142,17 +142,24 @@ async function handleApiRequest(url) {
                     // 分割不同播放源
                     const playSources = videoDetail.vod_play_url.split('$$$');
                     
-                    // 提取第一个播放源的集数（通常为主要源）
-                    if (playSources.length > 0) {
-                        const mainSource = playSources[0];
-                        const episodeList = mainSource.split('#');
-                        
-                        // 从每个集数中提取URL
-                        episodes = episodeList.map(ep => {
+                    // 尝试在所有源中找到包含 m3u8 的源
+                    for (const source of playSources) {
+                        const episodeList = source.split('#');
+                        const currentEpisodes = episodeList.map(ep => {
                             const parts = ep.split('$');
-                            // 返回URL部分(通常是第二部分，如果有的话)
-                            return parts.length > 1 ? parts[1] : '';
+                            return parts.length > 1 ? parts[1] : (parts[0].startsWith('http') ? parts[0] : '');
                         }).filter(url => url && (url.startsWith('http://') || url.startsWith('https://')));
+                        
+                        // 如果这个源有 m3u8 链接，优先使用
+                        if (currentEpisodes.some(url => url.includes('.m3u8'))) {
+                            episodes = currentEpisodes;
+                            break;
+                        }
+                        
+                        // 如果目前还没有找到任何集数，先存一份
+                        if (episodes.length === 0) {
+                            episodes = currentEpisodes;
+                        }
                     }
                 }
                 
