@@ -198,6 +198,26 @@ const API_SITES = {
         api: 'https://www.hongniuzyw.com/api.php/provide/vod/',
         name: '红牛资源'
     },
+    tiankong: {
+        api: 'https://m3u8.tiankongapi.com/api.php/provide/vod/',
+        name: '天空资源'
+    },
+    jisu: {
+        api: 'https://jszyapi.com/api.php/provide/vod/',
+        name: '极速资源'
+    },
+    wolong: {
+        api: 'https://collect.wolongzyw.com/api.php/provide/vod/',
+        name: '卧龙资源'
+    },
+    feisu: {
+        api: 'https://www.feisuzyapi.com/api.php/provide/vod/',
+        name: '飞速资源'
+    },
+    sakura: {
+        api: 'https://m3u8.sakurazy.tv/api.php/provide/vod/',
+        name: '樱花资源'
+    },
     testSource: {
         api: 'https://www.example.com/api.php/provide/vod',
         name: '空内容测试源',
