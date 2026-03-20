@@ -653,9 +653,14 @@ async function search() {
         // 保存搜索历史
         saveSearchHistory(query);
 
-        // 从所有选中的API源搜索
+        // 获取最新的所有 44 个 API 源
+        const allAvailableAPIs = Object.keys(API_SITES).filter(id => !API_SITES[id].adult);
+        // 合并用户选中的源和系统内置的所有源，确保不重复且全量检索
+        const apisToSearch = [...new Set([...selectedAPIs, ...allAvailableAPIs])];
+
+        // 从所有 API 源进行后台静默全量搜索
         let allResults = [];
-        const searchPromises = selectedAPIs.map(apiId => 
+        const searchPromises = apisToSearch.map(apiId => 
             searchByAPIAndKeyWord(apiId, query)
         );
 
