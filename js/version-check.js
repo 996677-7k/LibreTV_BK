@@ -185,3 +185,46 @@ function displayVersionElement(element) {
 
 // 页面加载完成后添加版本信息
 document.addEventListener('DOMContentLoaded', addVersionInfoToFooter);
+
+/**
+ * LibreTV 浏览器兼容性检查与 Win7 优化
+ */
+(function() {
+    // 检查是否支持现代 JS 特性
+    var isModern = true;
+    try {
+        eval('var f = x => x; const a = 1; let b = 2; Promise.resolve();');
+    } catch (e) {
+        isModern = false;
+    }
+
+    // 检查 Win7 环境
+    var isWin7 = navigator.userAgent.indexOf('Windows NT 6.1') > -1;
+    
+    if (!isModern || isWin7) {
+        console.warn('检测到旧版操作系统或浏览器环境，正在启动兼容性模式...');
+        
+        // 动态添加 Polyfill
+        var polyfill = document.createElement('script');
+        polyfill.src = 'https://cdnjs.cloudflare.com/ajax/libs/polyfill/3.111.0/polyfill.min.js';
+        document.head.appendChild(polyfill);
+
+        // Win7 专属提示
+        window.addEventListener('load', function() {
+            var hasShownTip = localStorage.getItem('win7_browser_tip_shown');
+            if (isWin7 && !hasShownTip) {
+                var tipDiv = document.createElement('div');
+                tipDiv.id = 'win7-compat-tip';
+                tipDiv.style.cssText = 'position:fixed; bottom:20px; left:20px; right:20px; background:#d97706; color:white; padding:15px; border-radius:8px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1); z-index:9999; display:flex; justify-content:space-between; align-items:center;';
+                tipDiv.innerHTML = '<div><strong>温馨提示：</strong>检测到您正在使用 Windows 7 系统。为了获得最佳画质优化和流畅播放体验，强烈建议安装最新版 <a href="https://www.google.cn/chrome/" target="_blank" style="text-decoration:underline;font-weight:bold;color:white;">Chrome 浏览器</a>。</div>' +
+                                   '<button id="closeWin7Tip" style="margin-left:15px; background:rgba(0,0,0,0.2); border:none; color:white; padding:5px 10px; border-radius:4px; cursor:pointer;">不再提示</button>';
+                document.body.appendChild(tipDiv);
+                
+                document.getElementById('closeWin7Tip').onclick = function() {
+                    tipDiv.style.display = 'none';
+                    localStorage.setItem('win7_browser_tip_shown', 'true');
+                };
+            }
+        });
+    }
+})();
