@@ -16,10 +16,10 @@ const SITE_CONFIG = {
     url: 'https://libretv.is-an.org',
     description: '免费在线视频搜索与观看平台',
     logo: 'image/logo.png',
-    version: '1.0.4'
+    version: '1.0.5'
 };
 
-// API站点配置 - 扩充至 43 个高质量、全面的 API 源
+// API站点配置 - 扩充至 44 个高质量、全面的 API 源
 const API_SITES = {
     // --- 顶级大厂源 (1-10) ---
     wolong: { api: 'https://collect.wolongzyw.com/api.php/provide/vod/', name: '卧龙资源' },
@@ -57,12 +57,11 @@ const API_SITES = {
     mdzy: { api: 'https://www.mdzyapi.com/api.php/provide/vod/', name: '魔都资源' },
     maotai: { api: 'https://api.maotaizy.com/api.php/provide/vod/', name: '茅台资源' },
 
-    // --- 新增高速源 (31-43) ---
+    // --- 高速及新增源 (31-44) ---
     xinlang: { api: 'https://api.xinlangapi.com/api.php/provide/vod/', name: '新浪资源' },
     baozha: { api: 'https://api.baozha.me/api.php/provide/vod/', name: '爆炸资源' },
     wwzy: { api: 'https://wwzy.tv/api.php/provide/vod/', name: '旺旺短剧' },
     lehuo: { api: 'https://api.lehuozy.com/api.php/provide/vod/', name: '乐活资源' },
-    modu: { api: 'https://api.moduapi.cc/api.php/provide/vod/', name: '魔都资源' },
     migu: { api: 'https://api.miguapi.com/api.php/provide/vod/', name: '咪咕资源' },
     youku: { api: 'https://api.youkuapi.com/api.php/provide/vod/', name: '优酷资源' },
     tengxun: { api: 'https://api.tengxunapi.com/api.php/provide/vod/', name: '腾讯资源' },
@@ -70,7 +69,9 @@ const API_SITES = {
     kuaiyun: { api: 'https://api.kuaiyunzy.com/api.php/provide/vod/', name: '快云资源' },
     haojiu: { api: 'https://api.haojiuzuida.com/api.php/provide/vod/', name: '好久资源' },
     henan: { api: 'https://api.henanzy.com/api.php/provide/vod/', name: '河南资源' },
-    shandong: { api: 'https://api.shandongzy.com/api.php/provide/vod/', name: '山东资源' }
+    shandong: { api: 'https://api.shandongzy.com/api.php/provide/vod/', name: '山东资源' },
+    kuyun: { api: 'https://api.kuyunzy.com/api.php/provide/vod/', name: '酷云资源' },
+    qihu: { api: 'https://api.qihuzy.com/api.php/provide/vod/', name: '奇虎资源' }
 };
 
 // 定义合并方法
