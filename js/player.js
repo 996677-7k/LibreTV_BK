@@ -1912,15 +1912,45 @@ function triggerAutoSwitch() {
                         if (data.episodes && data.episodes.length > currentEpisodeIndex) {
                             var targetIndex = currentEpisodeIndex;
                             var targetUrl = data.episodes[targetIndex];
-                            var watchUrl = 'player.html?id=' + match.vod_id + 
-                                           '&source=' + nextSource + 
-                                           '&url=' + encodeURIComponent(targetUrl) + 
-                                           '&index=' + targetIndex + 
-                                           '&title=' + encodeURIComponent(videoTitle) + 
-                                           '&position=' + Math.floor(currentPos);
+                            // --- 核心升级：实现“热加载”后台切线 ---
+                            // 1. 记录当前位置并减去10秒宽限，确保衔接
+                            var seekPos = Math.max(0, currentPos - 10);
                             
+                            // 2. 更新内存中的状态
+                            currentEpisodeIndex = targetIndex;
                             localStorage.setItem('currentEpisodes', JSON.stringify(data.episodes));
-                            window.location.href = watchUrl;
+                            localStorage.setItem('currentSourceCode', nextSource);
+                            
+                            // 3. 静默替换播放器视频源，不刷新页面
+                            if (window.art && window.art.switchUrl) {
+                                window.art.switchUrl(targetUrl).then(function() {
+                                    // 4. 精准定位到10秒前
+                                    window.art.currentTime = seekPos;
+                                    window.art.play().catch(function(e) { console.warn('热切后自动播放失败:', e); });
+                                    
+                                    // 5. 更新 URL 参数（静默更新，不触发刷新）
+                                    var newUrl = new URL(window.location.href);
+                                    newUrl.searchParams.set('source', nextSource);
+                                    newUrl.searchParams.set('url', targetUrl);
+                                    newUrl.searchParams.set('index', targetIndex);
+                                    newUrl.searchParams.set('position', Math.floor(seekPos));
+                                    window.history.replaceState({}, '', newUrl.toString());
+                                    
+                                    console.log('已完成热切换：', nextSource, '位置：', seekPos);
+                                    isSwitching = false;
+                                }).catch(function(err) {
+                                    console.error('热切换失败:', err);
+                                    isSwitching = false;
+                                });
+                            } else {
+                                // 兜底：如果 Artplayer 实例异常，则回退到页面跳转
+                                window.location.href = 'player.html?id=' + match.vod_id + 
+                                               '&source=' + nextSource + 
+                                               '&url=' + encodeURIComponent(targetUrl) + 
+                                               '&index=' + targetIndex + 
+                                               '&title=' + encodeURIComponent(videoTitle) + 
+                                               '&position=' + Math.floor(seekPos);
+                            }
                         } else {
                             // 如果集数不匹配，尝试下一个源（即使它可能稍慢）
                             tryNextSource(apiIndexOffset + 1);
