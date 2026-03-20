@@ -699,9 +699,13 @@ async function search() {
         document.getElementById('resultsArea').classList.remove('hidden');
 
         // 隐藏豆瓣推荐区域（如果存在）
-        const doubanArea = document.getElementById('doubanArea');
-        if (doubanArea) {
-            doubanArea.classList.add('hidden');
+        if (typeof updateDoubanVisibility === 'function') {
+            updateDoubanVisibility();
+        } else {
+            const doubanArea = document.getElementById('doubanArea');
+            if (doubanArea) {
+                doubanArea.classList.add('hidden');
+            }
         }
 
         const resultsDiv = document.getElementById('results');
