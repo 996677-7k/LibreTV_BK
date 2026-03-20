@@ -40,49 +40,8 @@
                 document.getElementsByTagName('head')[0].appendChild(style);
             }
 
-            // 检查是否已显示过提示
-            var hasShownTip = false;
-            try {
-                hasShownTip = localStorage.getItem('legacy_mode_tip_shown') === 'true';
-            } catch(e) {}
-
-            if (!hasShownTip) {
-                var tipDiv = document.createElement('div');
-                tipDiv.id = 'legacy-compat-banner';
-                // 使用最基础的 CSS 属性确保渲染
-                tipDiv.style.position = 'fixed';
-                tipDiv.style.top = '0';
-                tipDiv.style.left = '0';
-                tipDiv.style.right = '0';
-                tipDiv.style.backgroundColor = '#0284c7';
-                tipDiv.style.color = '#ffffff';
-                tipDiv.style.padding = '10px 20px';
-                tipDiv.style.textAlign = 'center';
-                tipDiv.style.fontSize = '14px';
-                tipDiv.style.fontWeight = 'bold';
-                tipDiv.style.zIndex = '100000';
-                tipDiv.style.boxShadow = '0 2px 5px rgba(0,0,0,0.5)';
-                
-                tipDiv.innerHTML = '已为您开启 <span style="color:#fbbf24;">“极速兼容模式”</span>：已优化旧版浏览器加载逻辑，确保流畅播放。' +
-                                   '<button id="closeLegacyTip" style="margin-left:20px; background:#ffffff; color:#0284c7; border:none; padding:3px 10px; border-radius:4px; cursor:pointer; font-size:12px;">知道了</button>';
-                
-                document.body.appendChild(tipDiv);
-                
-                var closeBtn = document.getElementById('closeLegacyTip');
-                if (closeBtn) {
-                    closeBtn.onclick = function() {
-                        tipDiv.style.display = 'none';
-                        try {
-                            localStorage.setItem('legacy_mode_tip_shown', 'true');
-                        } catch(e) {}
-                    };
-                }
-                
-                // 5秒后自动隐藏
-                setTimeout(function() {
-                    if (tipDiv) tipDiv.style.display = 'none';
-                }, 8000);
-            }
+            // 提示信息已按要求彻底移除，改为静默运行
+            console.log('极速兼容模式已静默开启');
         };
 
         // 绑定加载事件

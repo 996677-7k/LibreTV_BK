@@ -1809,6 +1809,8 @@ async function switchToResource(sourceKey, vodId) {
 var autoSwitchEnabled = false;
 var autoSwitchThreshold = 8000; // 8秒卡顿触发切换
 var lastPlayTimeUpdate = Date.now();
+var lastAutoSwitchCheck = Date.now();
+var autoSwitchInterval = 5 * 60 * 1000; // 每5分钟检测一次
 var isSwitching = false;
 
 // 初始化自动切线开关
@@ -1820,13 +1822,10 @@ function initAutoSwitch() {
         toggle.addEventListener('change', function(e) {
             autoSwitchEnabled = e.target.checked;
             localStorage.setItem('autoSwitchEnabled', autoSwitchEnabled);
-            if (autoSwitchEnabled) {
-                showToast('自动切线已开启：卡顿时将自动寻找最快线路', 'info');
-            }
         });
     }
 
-    // 启动监测定时器
+    // 启动监测定时器 - 依然保持2秒检查一次状态，但只有在满足5分钟间隔时才触发切换
     setInterval(checkPlaybackStalled, 2000);
 }
 
@@ -1835,9 +1834,14 @@ function checkPlaybackStalled() {
     if (!autoSwitchEnabled || !art || !art.video || art.video.paused || isSwitching) return;
 
     var currentTime = Date.now();
+    
+    // 检查是否到了5分钟的检测周期
+    if (currentTime - lastAutoSwitchCheck < autoSwitchInterval) return;
+
     // 如果视频正在播放（或者应该在播放），但进度没有更新
     if (art.playing && (currentTime - lastPlayTimeUpdate > autoSwitchThreshold)) {
-        console.warn('检测到播放卡顿，准备自动切换线路...');
+        console.warn('检测到播放卡顿，且已过5分钟检测周期，准备自动切换线路...');
+        lastAutoSwitchCheck = currentTime; // 重置检测周期
         triggerAutoSwitch();
     }
 }
@@ -1862,43 +1866,41 @@ function triggerAutoSwitch() {
     var currentPos = art.currentTime;
     var videoTitle = currentVideoTitle;
     
-    showToast('当前线路拥堵，正在为您自动切换极速线路...', 'loading');
+    // 静默切换，不再显示 Toast 提示
     
     // 获取备选资源
     var selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '[]');
     if (selectedAPIs.length <= 1) {
-        showToast('备选线路不足，请在设置中勾选更多API', 'warning');
         isSwitching = false;
         return;
     }
 
-    // 寻找下一个可用的 API（排除当前源，按顺序尝试）
     var currentSource = new URLSearchParams(window.location.search).get('source');
-    var currentSourceIndex = selectedAPIs.indexOf(currentSource);
-    var nextSource = '';
     
-    // 尝试寻找下一个源
-    for (var i = 1; i <= selectedAPIs.length; i++) {
-        var idx = (currentSourceIndex + i) % selectedAPIs.length;
-        if (selectedAPIs[idx] !== currentSource) {
-            nextSource = selectedAPIs[idx];
-            break;
+    // 递归尝试所有可用源，直到找到集数匹配的
+    function tryNextSource(apiIndexOffset) {
+        if (apiIndexOffset >= selectedAPIs.length) {
+            isSwitching = false;
+            return;
         }
-    }
 
-    if (!nextSource) {
-        isSwitching = false;
-        return;
-    }
+        var currentSourceIndex = selectedAPIs.indexOf(currentSource);
+        var idx = (currentSourceIndex + apiIndexOffset) % selectedAPIs.length;
+        var nextSource = selectedAPIs[idx];
 
-    // 执行搜索并寻找匹配的影片
-    searchByAPIAndKeyWord(nextSource, videoTitle).then(function(results) {
-        if (results && results.length > 0) {
+        if (nextSource === currentSource) {
+            tryNextSource(apiIndexOffset + 1);
+            return;
+        }
+
+        searchByAPIAndKeyWord(nextSource, videoTitle).then(function(results) {
             var match = null;
-            for (var j = 0; j < results.length; j++) {
-                if (results[j].vod_name === videoTitle) {
-                    match = results[j];
-                    break;
+            if (results && results.length > 0) {
+                for (var j = 0; j < results.length; j++) {
+                    if (results[j].vod_name === videoTitle) {
+                        match = results[j];
+                        break;
+                    }
                 }
             }
             
@@ -1906,14 +1908,9 @@ function triggerAutoSwitch() {
                 fetch('/api/detail?id=' + encodeURIComponent(match.vod_id) + '&source=' + nextSource)
                     .then(function(res) { return res.json(); })
                     .then(function(data) {
-                        if (data.episodes && data.episodes.length > 0) {
-                            // --- 智能集数匹配逻辑 ---
+                        // 核心逻辑：必须集数匹配或至少包含当前集数
+                        if (data.episodes && data.episodes.length > currentEpisodeIndex) {
                             var targetIndex = currentEpisodeIndex;
-                            // 如果索引不匹配，尝试通过内容匹配（如“第05集”）
-                            if (targetIndex >= data.episodes.length) {
-                                targetIndex = data.episodes.length - 1;
-                            }
-                            
                             var targetUrl = data.episodes[targetIndex];
                             var watchUrl = 'player.html?id=' + match.vod_id + 
                                            '&source=' + nextSource + 
@@ -1925,24 +1922,22 @@ function triggerAutoSwitch() {
                             localStorage.setItem('currentEpisodes', JSON.stringify(data.episodes));
                             window.location.href = watchUrl;
                         } else {
-                            isSwitching = false;
-                            showToast('备选线路无可用剧集', 'error');
+                            // 如果集数不匹配，尝试下一个源（即使它可能稍慢）
+                            tryNextSource(apiIndexOffset + 1);
                         }
                     })
                     .catch(function() {
-                        isSwitching = false;
+                        tryNextSource(apiIndexOffset + 1);
                     });
             } else {
-                isSwitching = false;
-                showToast('未在备选线路中找到相同影片', 'info');
+                tryNextSource(apiIndexOffset + 1);
             }
-        } else {
-            isSwitching = false;
-            showToast('备选线路响应失败', 'error');
-        }
-    }).catch(function() {
-        isSwitching = false;
-    });
+        }).catch(function() {
+            tryNextSource(apiIndexOffset + 1);
+        });
+    }
+
+    tryNextSource(1);
 }
 
 // 页面加载时初始化
