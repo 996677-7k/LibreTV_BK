@@ -54,17 +54,13 @@ async function searchByAPIAndKeyWord(apiId, query) {
             // 如果标题完全匹配或包含查询词，保留
             if (title.includes(lowerQuery) || lowerQuery.includes(title)) return true;
             
-            // 如果查询词较长，检查是否有显著重叠
-            if (lowerQuery.length > 2) {
-                let matchCount = 0;
-                for (let i = 0; i < lowerQuery.length; i++) {
-                    if (title.includes(lowerQuery[i])) matchCount++;
-                }
-                // 如果匹配超过 50% 的字符，也保留（简单启发式）
-                if (matchCount / lowerQuery.length > 0.5) return true;
+            // 只要包含搜索词的任意一部分（长度大于1），就保留，由 app.js 后续进行更精准的排序
+            if (lowerQuery.length > 1) {
+                // 检查搜索词是否包含在标题中，或者标题包含搜索词（模糊匹配）
+                return title.includes(lowerQuery) || lowerQuery.includes(title);
             }
             
-            return false;
+            return title.includes(lowerQuery);
         });
         
         // 获取总页数

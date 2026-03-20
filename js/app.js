@@ -653,9 +653,10 @@ async function search() {
         // 保存搜索历史
         saveSearchHistory(query);
 
-        // 获取最新的所有 44 个 API 源
+        // 获取最新的所有 API 源
         const allAvailableAPIs = Object.keys(API_SITES).filter(id => !API_SITES[id].adult);
-        // 合并用户选中的源和系统内置的所有源，确保不重复且全量检索
+        // 合并用户选中的源和系统内置的所有源，确保全量检索
+        // 即使没有勾选，也会在后台搜索所有内置源
         const apisToSearch = [...new Set([...selectedAPIs, ...allAvailableAPIs])];
 
         // 从所有 API 源进行后台静默全量搜索
@@ -667,15 +668,51 @@ async function search() {
         // 等待所有搜索请求完成
         const resultsArray = await Promise.all(searchPromises);
 
-        // 合并所有结果
-        resultsArray.forEach(results => {
+        // 合并所有结果，并保留来源信息
+        resultsArray.forEach((results, index) => {
             if (Array.isArray(results) && results.length > 0) {
-                allResults = allResults.concat(results);
+                const apiId = apisToSearch[index];
+                const sourceName = API_SITES[apiId] ? API_SITES[apiId].name : '未知源';
+                
+                results.forEach(item => {
+                    // 确保每个结果都带有准确的来源名称和代码
+                    item.source_name = sourceName;
+                    item.source_code = apiId;
+                    allResults.push(item);
+                });
             }
         });
 
-        // 对搜索结果进行排序：按名称相关性优先，名称相同时按接口源排序
+        // 1. 强制关键词过滤：确保搜索结果标题中确实包含搜索词，防止某些API（如豆瓣资源）返回无关推荐
         const lowerQuery = query.toLowerCase();
+        allResults = allResults.filter(item => {
+            const name = (item.vod_name || '').toLowerCase();
+            return name.includes(lowerQuery) || lowerQuery.includes(name);
+        });
+
+        // 2. 处理搜索结果过滤：如果启用了黄色内容过滤，则过滤掉分类含有敏感内容的项目
+        const yellowFilterEnabled = localStorage.getItem('yellowFilterEnabled') === 'true';
+        if (yellowFilterEnabled) {
+            const banned = ['伦理片', '福利', '里番动漫', '门事件', '萝莉少女', '制服诱惑', '国产传媒', 'cosplay', '黑丝诱惑', '无码', '日本无码', '有码', '日本有码', 'SWAG', '网红主播', '色情片', '同性片', '福利视频', '福利片'];
+            allResults = allResults.filter(item => {
+                const typeName = item.type_name || '';
+                return !banned.some(keyword => typeName.includes(keyword));
+            });
+        }
+
+        // 3. 去重：同一来源的相同 ID 结果只保留一个
+        const uniqueResults = [];
+        const seen = new Set();
+        allResults.forEach(item => {
+            const key = `${item.source_code}_${item.vod_id}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                uniqueResults.push(item);
+            }
+        });
+        allResults = uniqueResults;
+
+        // 4. 对搜索结果进行排序：按名称相关性优先，名称相同时按接口源排序
         allResults.sort((a, b) => {
             const nameA = (a.vod_name || '').toLowerCase();
             const nameB = (b.vod_name || '').toLowerCase();
@@ -757,22 +794,6 @@ async function search() {
         } catch (e) {
             console.error('更新浏览器历史失败:', e);
             // 如果更新URL失败，继续执行搜索
-        }
-
-        // 1. 强制关键词过滤：确保搜索结果标题中确实包含搜索词，防止某些API（如豆瓣资源）返回无关推荐
-        allResults = allResults.filter(item => {
-            const name = (item.vod_name || '').toLowerCase();
-            return name.includes(lowerQuery);
-        });
-
-        // 2. 处理搜索结果过滤：如果启用了黄色内容过滤，则过滤掉分类含有敏感内容的项目
-        const yellowFilterEnabled = localStorage.getItem('yellowFilterEnabled') === 'true';
-        if (yellowFilterEnabled) {
-            const banned = ['伦理片', '福利', '里番动漫', '门事件', '萝莉少女', '制服诱惑', '国产传媒', 'cosplay', '黑丝诱惑', '无码', '日本无码', '有码', '日本有码', 'SWAG', '网红主播', '色情片', '同性片', '福利视频', '福利片'];
-            allResults = allResults.filter(item => {
-                const typeName = item.type_name || '';
-                return !banned.some(keyword => typeName.includes(keyword));
-            });
         }
 
         // 添加XSS保护，使用textContent和属性转义
