@@ -413,35 +413,40 @@ function initPlayer(videoUrl) {
     const hlsConfig = {
         debug: false,
         loader: adFilteringEnabled ? CustomHlsJsLoader : Hls.DefaultConfig.loader,
-        enableWorker: !isLegacy, // 旧设备禁用 Worker 避免主线程竞争
+        enableWorker: true, // 开启多线程解码，即使是旧设备也尝试利用多核性能
         lowLatencyMode: false,
-        // 针对旧设备（Win7/360）减小缓冲区，防止内存溢出导致卡顿
-        backBufferLength: isLegacy ? 30 : 120,
-        maxBufferLength: isLegacy ? 15 : 60,      
-        maxMaxBufferLength: isLegacy ? 30 : 120,  
-        maxBufferSize: isLegacy ? (20 * 1000 * 1000) : (100 * 1000 * 1000), 
+        // --- 针对 Win7/360 浏览器的 1080P 极致优化 ---
+        // 1. 扩容缓冲区以应对 1080P 巨大数据量
+        backBufferLength: isLegacy ? 60 : 120,
+        maxBufferLength: isLegacy ? 60 : 120,      
+        maxMaxBufferLength: isLegacy ? 120 : 300,  
+        maxBufferSize: isLegacy ? (60 * 1000 * 1000) : (150 * 1000 * 1000), 
         maxBufferHole: 0.5,
-        // 增加重试频率，应对旧设备网络栈延迟
-        fragLoadingMaxRetry: 15,
+        
+        // 2. 增加重试频率，应对旧设备网络栈延迟
+        fragLoadingMaxRetry: 20,
         fragLoadingMaxRetryTimeout: 120000,
         fragLoadingRetryDelay: 300,
-        manifestLoadingMaxRetry: 8,
+        manifestLoadingMaxRetry: 10,
         manifestLoadingRetryDelay: 300,
-        levelLoadingMaxRetry: 8,
+        levelLoadingMaxRetry: 10,
         levelLoadingRetryDelay: 300,
-        startLevel: isLegacy ? 0 : -1, // 旧设备从最低画质起播，平滑后再自动升质
-        // 优化带宽估算算法
-        abrEwmaDefaultEstimate: 500000, 
-        abrBandWidthFactor: 0.9,
-        abrBandWidthUpFactor: 0.5,
+        
+        // 3. 强制高画质优先：即使是旧设备也从较高画质起播，并诱导加载 1080P 流
+        startLevel: -1, // 自动选择最佳
+        abrEwmaDefaultEstimate: 15000000, // 初始码率估算提升至 15Mbps
+        abrBandWidthFactor: 0.95,
+        abrBandWidthUpFactor: 0.7,
         abrMaxWithRealBitrate: true,
+        
         stretchShortVideoTrack: true,
         appendErrorMaxRetry: 15,
         liveSyncDurationCount: 3,
         liveDurationInfinity: false,
-        // 启用分片预取
-        enableWebCrypto: !isLegacy,
-        capLevelToPlayerSize: true,
+        
+        // 4. 启用分片预取与性能优化
+        enableWebCrypto: true,
+        capLevelToPlayerSize: false, // 不限制画质级别到播放器尺寸，确保 1080P
         ignoreDevicePixelRatio: true
     };
 
