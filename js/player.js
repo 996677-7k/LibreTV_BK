@@ -408,33 +408,40 @@ function initPlayer(videoUrl) {
         art = null;
     }
 
-    // 配置HLS.js选项
+    // 配置HLS.js选项 - 针对晚间高峰期进行优化
     const hlsConfig = {
         debug: false,
         loader: adFilteringEnabled ? CustomHlsJsLoader : Hls.DefaultConfig.loader,
         enableWorker: true,
         lowLatencyMode: false,
-        backBufferLength: 90,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 30 * 1000 * 1000,
+        // 增加缓冲区长度，应对网络波动
+        backBufferLength: 120,
+        maxBufferLength: 60,      // 增加到60秒
+        maxMaxBufferLength: 120,  // 最大增加到120秒
+        maxBufferSize: 100 * 1000 * 1000, // 增加到100MB
         maxBufferHole: 0.5,
-        fragLoadingMaxRetry: 6,
-        fragLoadingMaxRetryTimeout: 64000,
-        fragLoadingRetryDelay: 1000,
-        manifestLoadingMaxRetry: 3,
-        manifestLoadingRetryDelay: 1000,
-        levelLoadingMaxRetry: 4,
-        levelLoadingRetryDelay: 1000,
-        startLevel: -1,
-        abrEwmaDefaultEstimate: 500000,
-        abrBandWidthFactor: 0.95,
-        abrBandWidthUpFactor: 0.7,
+        // 增加重试次数和超时时间
+        fragLoadingMaxRetry: 10,
+        fragLoadingMaxRetryTimeout: 120000,
+        fragLoadingRetryDelay: 500,
+        manifestLoadingMaxRetry: 5,
+        manifestLoadingRetryDelay: 500,
+        levelLoadingMaxRetry: 6,
+        levelLoadingRetryDelay: 500,
+        startLevel: -1, // 自动选择最佳画质
+        // 优化带宽估算算法
+        abrEwmaDefaultEstimate: 1000000, // 初始估算提高到1Mbps
+        abrBandWidthFactor: 0.9,
+        abrBandWidthUpFactor: 0.5,
         abrMaxWithRealBitrate: true,
         stretchShortVideoTrack: true,
-        appendErrorMaxRetry: 5,  // 增加尝试次数
+        appendErrorMaxRetry: 10,
         liveSyncDurationCount: 3,
-        liveDurationInfinity: false
+        liveDurationInfinity: false,
+        // 启用分片预取
+        enableWebCrypto: true,
+        capLevelToPlayerSize: false,
+        ignoreDevicePixelRatio: true
     };
 
     // Create new ArtPlayer instance
