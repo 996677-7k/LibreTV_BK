@@ -742,6 +742,7 @@ function initPlayer(videoUrl) {
 
     // 添加双击全屏支持
     art.on('video:playing', () => {
+        hasStartedPlaying = true; // 标记已成功起播
         // 绑定双击事件到视频容器
         if (art.video) {
             art.video.addEventListener('dblclick', () => {
@@ -1808,10 +1809,13 @@ async function switchToResource(sourceKey, vodId) {
 
 var autoSwitchEnabled = false;
 var autoSwitchThreshold = 8000; // 8秒卡顿触发切换
+var initialLoadTimeout = 15000; // 15秒起播超时
 var lastPlayTimeUpdate = Date.now();
 var lastAutoSwitchCheck = Date.now();
 var autoSwitchInterval = 1 * 60 * 1000; // 每1分钟检测一次
 var isSwitching = false;
+var playerStartTime = Date.now();
+var hasStartedPlaying = false;
 
 // 初始化自动切线开关
 function initAutoSwitch() {
@@ -1825,22 +1829,34 @@ function initAutoSwitch() {
         });
     }
 
-    // 启动监测定时器 - 依然保持2秒检查一次状态，但只有在满足5分钟间隔时才触发切换
+    // 启动监测定时器
     setInterval(checkPlaybackStalled, 2000);
 }
 
-// 监测播放是否卡顿
+// 监测播放是否卡顿或起播失败
 function checkPlaybackStalled() {
-    if (!autoSwitchEnabled || !art || !art.video || art.video.paused || isSwitching) return;
+    if (!autoSwitchEnabled || !art || !art.video || isSwitching) return;
 
     var currentTime = Date.now();
     
-    // 检查是否到了5分钟的检测周期
+    // 1. 处理起播失败：如果点击播放后15秒内没有产生任何进度
+    if (!hasStartedPlaying && (currentTime - playerStartTime > initialLoadTimeout)) {
+        if (art.video.currentTime === 0) {
+            console.warn('检测到起播失败（15秒无响应），准备自动切换线路...');
+            playerStartTime = currentTime; // 重置起播计时，避免连续触发
+            triggerAutoSwitch();
+            return;
+        } else {
+            hasStartedPlaying = true;
+        }
+    }
+
+    // 2. 处理播放中卡顿（每1分钟检测一次）
     if (currentTime - lastAutoSwitchCheck < autoSwitchInterval) return;
 
-    // 如果视频正在播放（或者应该在播放），但进度没有更新
-    if (art.playing && (currentTime - lastPlayTimeUpdate > autoSwitchThreshold)) {
-        console.warn('检测到播放卡顿，且已过5分钟检测周期，准备自动切换线路...');
+    // 如果视频应该在播放，但进度没有更新
+    if (!art.video.paused && (currentTime - lastPlayTimeUpdate > autoSwitchThreshold)) {
+        console.warn('检测到播放卡顿，且已过1分钟检测周期，准备自动切换线路...');
         lastAutoSwitchCheck = currentTime; // 重置检测周期
         triggerAutoSwitch();
     }
