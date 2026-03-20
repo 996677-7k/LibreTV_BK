@@ -664,10 +664,13 @@ function initPlayer(videoUrl) {
         const urlParams = new URLSearchParams(window.location.search);
         const savedPosition = parseInt(urlParams.get('position') || '0');
 
-        if (savedPosition > 10 && savedPosition < art.duration - 2) {
+        if (savedPosition > 0 && savedPosition < art.duration - 2) {
             // 如果URL中有有效的播放位置参数，直接使用它
+            // 自动切线通常需要精准跳转，所以即使小于10秒也跳转
             art.currentTime = savedPosition;
-            showPositionRestoreHint(savedPosition);
+            if (savedPosition > 10) {
+                showPositionRestoreHint(savedPosition);
+            }
         } else {
             // 否则尝试从本地存储恢复播放进度
             try {
@@ -1799,3 +1802,145 @@ async function switchToResource(sourceKey, vodId) {
         hideLoading();
     }
 }
+// =================================
+// ======= AUTO SWITCH LOGIC =======
+// =================================
+
+var autoSwitchEnabled = false;
+var autoSwitchThreshold = 8000; // 8秒卡顿触发切换
+var lastPlayTimeUpdate = Date.now();
+var isSwitching = false;
+
+// 初始化自动切线开关
+function initAutoSwitch() {
+    var toggle = document.getElementById('autoSwitchToggle');
+    if (toggle) {
+        autoSwitchEnabled = localStorage.getItem('autoSwitchEnabled') === 'true';
+        toggle.checked = autoSwitchEnabled;
+        toggle.addEventListener('change', function(e) {
+            autoSwitchEnabled = e.target.checked;
+            localStorage.setItem('autoSwitchEnabled', autoSwitchEnabled);
+            if (autoSwitchEnabled) {
+                showToast('自动切线已开启：卡顿时将自动寻找最快线路', 'info');
+            }
+        });
+    }
+
+    // 启动监测定时器
+    setInterval(checkPlaybackStalled, 2000);
+}
+
+// 监测播放是否卡顿
+function checkPlaybackStalled() {
+    if (!autoSwitchEnabled || !art || !art.video || art.video.paused || isSwitching) return;
+
+    var currentTime = Date.now();
+    // 如果视频正在播放（或者应该在播放），但进度没有更新
+    if (art.playing && (currentTime - lastPlayTimeUpdate > autoSwitchThreshold)) {
+        console.warn('检测到播放卡顿，准备自动切换线路...');
+        triggerAutoSwitch();
+    }
+}
+
+// 监听播放进度更新
+if (document.getElementById('player')) {
+    var checkArtInterval = setInterval(function() {
+        if (window.art && window.art.video) {
+            window.art.video.addEventListener('timeupdate', function() {
+                lastPlayTimeUpdate = Date.now();
+            });
+            clearInterval(checkArtInterval);
+        }
+    }, 500);
+}
+
+// 触发自动切线
+function triggerAutoSwitch() {
+    if (isSwitching) return;
+    isSwitching = true;
+    
+    var currentPos = art.currentTime;
+    var videoTitle = currentVideoTitle;
+    
+    showToast('当前线路拥堵，正在为您自动切换极速线路...', 'loading');
+    
+    // 获取备选资源
+    var selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '[]');
+    if (selectedAPIs.length <= 1) {
+        showToast('备选线路不足，请在设置中勾选更多API', 'warning');
+        isSwitching = false;
+        return;
+    }
+
+    // 寻找下一个可用的 API
+    var currentSource = new URLSearchParams(window.location.search).get('source');
+    var nextSource = '';
+    for (var i = 0; i < selectedAPIs.length; i++) {
+        if (selectedAPIs[i] !== currentSource) {
+            nextSource = selectedAPIs[i];
+            break;
+        }
+    }
+
+    if (!nextSource) {
+        isSwitching = false;
+        return;
+    }
+
+    // 执行搜索并寻找匹配的影片
+    searchByAPIAndKeyWord(nextSource, videoTitle).then(function(results) {
+        if (results && results.length > 0) {
+            // 寻找名称完全匹配的
+            var match = null;
+            for (var j = 0; j < results.length; j++) {
+                if (results[j].vod_name === videoTitle) {
+                    match = results[j];
+                    break;
+                }
+            }
+            
+            if (match) {
+                // 获取详情并切换，保持进度
+                fetch('/api/detail?id=' + encodeURIComponent(match.vod_id) + '&source=' + nextSource)
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        if (data.episodes && data.episodes.length > currentEpisodeIndex) {
+                            var targetUrl = data.episodes[currentEpisodeIndex];
+                            // 构建带进度的 URL
+                            var watchUrl = 'player.html?id=' + match.vod_id + 
+                                           '&source=' + nextSource + 
+                                           '&url=' + encodeURIComponent(targetUrl) + 
+                                           '&index=' + currentEpisodeIndex + 
+                                           '&title=' + encodeURIComponent(videoTitle) + 
+                                           '&position=' + Math.floor(currentPos);
+                            
+                            // 保存状态
+                            localStorage.setItem('currentEpisodes', JSON.stringify(data.episodes));
+                            
+                            // 跳转（player.js 已有逻辑会在加载时读取 position 参数并跳转）
+                            window.location.href = watchUrl;
+                        } else {
+                            isSwitching = false;
+                            showToast('备选线路集数不匹配', 'error');
+                        }
+                    })
+                    .catch(function() {
+                        isSwitching = false;
+                    });
+            } else {
+                isSwitching = false;
+                showToast('未在备选线路中找到相同影片', 'info');
+            }
+        } else {
+            isSwitching = false;
+            showToast('备选线路响应失败', 'error');
+        }
+    }).catch(function() {
+        isSwitching = false;
+    });
+}
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', function() {
+    initAutoSwitch();
+});

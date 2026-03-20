@@ -108,12 +108,21 @@
         <div class="player-container mb-2">
             <div class="flex flex-wrap justify-end items-center gap-2">
                 <!-- 自动连播开关 - 分组到左边 -->
-                <div class="flex items-center gap-1 flex-shrink-0 mr-auto">
-                    <span class="text-gray-400 text-sm whitespace-nowrap">自动连播</span>
-                    <label class="switch">
-                        <input type="checkbox" id="autoplayToggle">
-                        <span class="slider"></span>
-                    </label>
+                <div class="flex items-center gap-4 flex-shrink-0 mr-auto">
+                    <div class="flex items-center gap-1">
+                        <span class="text-gray-400 text-sm whitespace-nowrap">自动连播</span>
+                        <label class="switch">
+                            <input type="checkbox" id="autoplayToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-gray-400 text-sm whitespace-nowrap">自动切线</span>
+                        <label class="switch">
+                            <input type="checkbox" id="autoSwitchToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
                 </div>
                 
                 <!-- 把各种功能按钮放在右侧 - 在小屏幕上各自占一行 -->
