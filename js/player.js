@@ -402,6 +402,10 @@ function initPlayer(videoUrl) {
         return
     }
 
+    // 重置起播状态
+    hasStartedPlaying = false;
+    playerStartTime = Date.now();
+
     // 销毁旧实例
     if (art) {
         art.destroy();
@@ -503,13 +507,13 @@ function initPlayer(videoUrl) {
                 // 跟踪是否有错误发生
                 let errorCount = 0;
                 // 跟踪视频是否开始播放
-                let playbackStarted = false;
+                // 使用全局 hasStartedPlaying 变量
                 // 跟踪视频是否出现bufferAppendError
                 let bufferAppendErrorCount = 0;
 
                 // 监听视频播放事件
                 video.addEventListener('playing', function () {
-                    playbackStarted = true;
+                    hasStartedPlaying = true;
                     document.getElementById('player-loading').style.display = 'none';
                     document.getElementById('error').style.display = 'none';
                 });
@@ -552,7 +556,7 @@ function initPlayer(videoUrl) {
                     if (data.details === 'bufferAppendError') {
                         bufferAppendErrorCount++;
                         // 如果视频已经开始播放，则忽略这个错误
-                        if (playbackStarted) {
+                        if (hasStartedPlaying) {
                             return;
                         }
 
@@ -563,7 +567,7 @@ function initPlayer(videoUrl) {
                     }
 
                     // 如果是致命错误，且视频未播放
-                    if (data.fatal && !playbackStarted) {
+                    if (data.fatal && !hasStartedPlaying) {
                         // 尝试恢复错误
                         switch (data.type) {
                             case Hls.ErrorTypes.NETWORK_ERROR:
@@ -1826,8 +1830,12 @@ var hasStartedPlaying = false;
 var stallCount = 0; // 卡顿计数器
 var stallResetInterval = 60 * 1000; // 1分钟重置周期
 var lastStallResetTime = Date.now();
-var maxStallLimit = 5; // 1分钟内允许的最大卡顿次数
+var maxStallLimit = 5; // 短时间内允许的最大卡顿次数
 var isStalled = false; // 当前是否处于卡顿状态
+var lastSmoothPlayStartTime = Date.now(); // 上一次流畅播放开始时间
+var smoothPlayThreshold = 3 * 60 * 1000; // 3分钟流畅播放阈值
+var lastSwitchTime = 0; // 上一次切换时间
+var switchCooldown = 30 * 1000; // 切换冷却时间（30秒），防止频繁切换
 
 // 初始化自动切线开关
 function initAutoSwitch() {
@@ -1863,7 +1871,21 @@ function checkPlaybackStalled() {
         }
     }
 
-    // 2. 处理高频微卡顿监控（1分钟内超过5次卡顿即切线）
+    // 2. 处理流畅播放重置逻辑：如果流畅播放超过3分钟，重置卡顿计数
+    if (!art.video.paused && !isStalled && (currentTime - lastPlayTimeUpdate < 2000)) {
+        if (currentTime - lastSmoothPlayStartTime > smoothPlayThreshold) {
+            if (stallCount > 0) {
+                console.log('视频已流畅播放超过3分钟，重置卡顿计数器');
+                stallCount = 0;
+            }
+            lastSmoothPlayStartTime = currentTime; // 更新流畅播放起始点
+        }
+    } else if (isStalled || art.video.paused) {
+        // 如果卡顿或暂停，重置流畅播放计时
+        lastSmoothPlayStartTime = currentTime;
+    }
+
+    // 3. 处理高频微卡顿监控（短时间内超过5次卡顿即切线）
     // 如果视频应该在播放，但进度没有更新，且当前未标记为卡顿
     if (!art.video.paused && (currentTime - lastPlayTimeUpdate > 2000)) { // 超过2秒没更新即视为一次微卡顿
         if (!isStalled) {
@@ -1873,7 +1895,12 @@ function checkPlaybackStalled() {
             
             // 检查是否达到切换阈值
             if (stallCount >= maxStallLimit) {
-                console.warn('1分钟内频繁卡顿（已达5次），准备强制自动切换线路...');
+                // 检查切换冷却时间
+                if (currentTime - lastSwitchTime < switchCooldown) {
+                    console.warn('频繁卡顿但处于切换冷却期，暂不切换');
+                    return;
+                }
+                console.warn('短时间内频繁卡顿（已达5次），准备强制自动切换线路...');
                 stallCount = 0; // 重置计数
                 triggerAutoSwitch();
                 return;
@@ -1883,9 +1910,11 @@ function checkPlaybackStalled() {
         isStalled = false; // 恢复播放，重置卡顿标记
     }
 
-    // 每分钟重置一次卡顿计数器
+    // 每分钟重置一次卡顿计数器（如果长时间没卡顿也重置）
     if (currentTime - lastStallResetTime > stallResetInterval) {
-        stallCount = 0;
+        if (stallCount > 0) {
+            stallCount = Math.max(0, stallCount - 1); // 缓慢衰减，而不是直接清零，更符合“短时间内”逻辑
+        }
         lastStallResetTime = currentTime;
     }
 
@@ -1916,15 +1945,25 @@ if (document.getElementById('player')) {
 function triggerAutoSwitch() {
     if (isSwitching) return;
     isSwitching = true;
+    lastSwitchTime = Date.now(); // 记录切换时间
     
     var currentPos = art.currentTime;
     var videoTitle = currentVideoTitle;
     
-    // 静默切换，不再显示 Toast 提示
+    // 定义优质 API 列表 (根据 config.js 中的顶级大厂源)
+    const highQualityAPIs = ['wolong', 'lzi', 'kczy', 'guangsu', 'sony', 'hongniu', 'jinying', 'feisu', 'tiankong', 'jisu'];
     
     // 获取备选资源
     var selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '[]');
-    if (selectedAPIs.length <= 1) {
+    
+    // 优先考虑优质 API
+    let candidateAPIs = selectedAPIs.filter(api => highQualityAPIs.includes(api));
+    // 如果没有选中的优质 API，则使用所有选中的 API
+    if (candidateAPIs.length === 0) {
+        candidateAPIs = selectedAPIs;
+    }
+    
+    if (candidateAPIs.length <= 1 && selectedAPIs.length <= 1) {
         isSwitching = false;
         return;
     }
@@ -1933,18 +1972,29 @@ function triggerAutoSwitch() {
     
     // 递归尝试所有可用源，直到找到集数匹配的
     function tryNextSource(apiIndexOffset) {
-        if (apiIndexOffset >= selectedAPIs.length) {
-            isSwitching = false;
-            return;
+        if (apiIndexOffset >= candidateAPIs.length) {
+            // 如果优质 API 都试过了还没找到，尝试所有选中的 API
+            if (candidateAPIs !== selectedAPIs) {
+                candidateAPIs = selectedAPIs;
+                apiIndexOffset = 0;
+            } else {
+                isSwitching = false;
+                return;
+            }
         }
 
-        var currentSourceIndex = selectedAPIs.indexOf(currentSource);
-        var idx = (currentSourceIndex + apiIndexOffset) % selectedAPIs.length;
-        var nextSource = selectedAPIs[idx];
+        var currentSourceIndex = candidateAPIs.indexOf(currentSource);
+        var idx = (currentSourceIndex + apiIndexOffset + 1) % candidateAPIs.length;
+        var nextSource = candidateAPIs[idx];
 
         if (nextSource === currentSource) {
-            tryNextSource(apiIndexOffset + 1);
-            return;
+            if (candidateAPIs.length > 1) {
+                tryNextSource(apiIndexOffset + 1);
+                return;
+            } else {
+                isSwitching = false;
+                return;
+            }
         }
 
         searchByAPIAndKeyWord(nextSource, videoTitle).then(function(results) {
